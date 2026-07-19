@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EKCLOCK · Bảng điều khiển</title>
+<style>
+  :root{
+    --paper: #ece8df;
+    --paper-deep: #e2ddd1;
+    --card: #f8f6f0;
+    --ink: #211d17;
+    --ink-soft: #55503f;
+    --ink-faint: #8c8574;
+    --rule: #cdc6b3;
+    --stamp-green: #2f5f4a;
+    --stamp-green-deep: #24493a;
+    --stamp-rust: #a4402c;
+    --stamp-rust-deep: #832f1f;
+    --amber: #a97327;
+    --focus: #1c6b8f;
+    --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    --font-mono: "SFMono-Regular", ui-monospace, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0; padding:0;
+    background:
+      radial-gradient(ellipse at top left, rgba(255,255,255,0.5), transparent 55%),
+      var(--paper);
+    color:var(--ink);
+    font-family:var(--font-mono);
+    min-height:100vh;
+  }
+
+  body{
+    background-image:
+      radial-gradient(ellipse at top left, rgba(255,255,255,0.5), transparent 55%),
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.015) 0px, rgba(0,0,0,0.015) 1px, transparent 1px, transparent 3px),
+      var(--paper);
+  }
+
+  .wrap{
+    max-width:760px;
+    margin:0 auto;
+    padding:32px 20px 64px;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:16px;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:22px;
+    flex-wrap:wrap;
+  }
+  .brand-eyebrow{
+    font-size:11px;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin:0 0 4px;
+  }
+  h1{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:32px;
+    margin:0;
+    letter-spacing:0.01em;
+  }
+  .header-note{
+    font-size:12px;
+    color:var(--ink-soft);
+    text-align:right;
+    line-height:1.5;
+    max-width:220px;
+  }
+  .header-note a{ color:var(--focus); }
+
+  /* ---------- Device preview (signature element) ---------- */
+  .device-shell{
+    background:linear-gradient(180deg,#d9d4c6,#c7c1af);
+    border-radius:14px;
+    padding:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,0.6) inset, 0 10px 24px rgba(30,26,15,0.18);
+    margin-bottom:26px;
+  }
+  .device-screen{
+    background:#f2efe6;
+    border:1px solid #b9b19c;
+    border-radius:3px;
+    padding:16px 18px;
+    font-family:var(--font-mono);
+    color:var(--ink);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:14px;
+    flex-wrap:wrap;
+    position:relative;
+    overflow:hidden;
+  }
+  .device-screen::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image:repeating-linear-gradient(90deg, rgba(0,0,0,0.025) 0 1px, transparent 1px 4px);
+    pointer-events:none;
+  }
+  .device-date{ font-size:13px; color:var(--ink-soft); letter-spacing:0.02em; }
+  .device-time{
+    font-size:40px;
+    font-weight:700;
+    letter-spacing:0.03em;
+    font-variant-numeric:tabular-nums;
+  }
+  .device-status-dot{
+    width:9px; height:9px; border-radius:50%;
+    background:var(--stamp-rust);
+    display:inline-block;
+    margin-right:7px;
+    box-shadow:0 0 0 3px rgba(164,64,44,0.15);
+    transition:background .25s, box-shadow .25s;
+  }
+  .device-status-dot.on{
+    background:var(--stamp-green);
+    box-shadow:0 0 0 3px rgba(47,95,74,0.16);
+  }
+  .device-status-line{
+    font-size:12px;
+    color:var(--ink-soft);
+    display:flex;
+    align-items:center;
+  }
+  .device-name{ font-weight:600; color:var(--ink); }
+
+  /* ---------- Cards ---------- */
+  .card{
+    background:var(--card);
+    border:1px solid var(--rule);
+    border-radius:10px;
+    padding:20px 22px;
+    margin-bottom:18px;
+  }
+  .card h2{
+    font-family:var(--font-display);
+    font-size:16px;
+    font-weight:600;
+    margin:0 0 4px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2 .idx{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--ink-faint);
+    border:1px solid var(--rule);
+    border-radius:4px;
+    padding:1px 6px;
+  }
+  .card p.desc{
+    margin:0 0 16px;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    line-height:1.55;
+  }
+
+  .connect-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+
+  /* ---------- Buttons ---------- */
+  button{
+    font-family:var(--font-mono);
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:0.01em;
+    border-radius:7px;
+    border:1px solid var(--ink);
+    padding:10px 16px;
+    cursor:pointer;
+    background:var(--ink);
+    color:var(--paper);
+    transition:transform .08s ease, opacity .15s ease;
+  }
+  button:hover{ opacity:0.88; }
+  button:active{ transform:translateY(1px); }
+  button:focus-visible{ outline:3px solid var(--focus); outline-offset:2px; }
+  button:disabled{
+    background:transparent;
+    color:var(--ink-faint);
+    border-color:var(--rule);
+    cursor:not-allowed;
+  }
+  button.secondary{
+    background:transparent;
+    color:var(--ink);
+  }
+  button.danger{
+    background:var(--stamp-rust);
+    border-color:var(--stamp-rust-deep);
+  }
+  button.wide{ width:100%; }
+
+  .actions-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(150px,1fr));
+    gap:10px;
+  }
+
+  /* ---------- Stat row ---------- */
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(140px,1fr));
+    gap:14px;
+    margin-top:2px;
+  }
+  .stat{
+    border-left:3px solid var(--rule);
+    padding-left:10px;
+  }
+  .stat.live{ border-left-color:var(--stamp-green); }
+  .stat-label{
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:0.14em;
+    color:var(--ink-faint);
+  }
+  .stat-value{
+    font-size:19px;
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+    margin-top:2px;
+  }
+
+  /* ---------- Calibrate ---------- */
+  .cal-row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .cal-row input{
+    font-family:var(--font-mono);
+    font-size:13px;
+    width:90px;
+    padding:9px 10px;
+    border:1px solid var(--rule);
+    border-radius:6px;
+    background:#fff;
+    color:var(--ink);
+  }
+  .cal-row input:focus-visible{ outline:2px solid var(--focus); }
+  .cal-row label{ font-size:12px; color:var(--ink-soft); }
+
+  /* ---------- Log ---------- */
+  .log-head{
+    display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;
+  }
+  .log-head h2{ margin:0; }
+  #log{
+    background:#1a1712;
+    color:#d9d2c0;
+    border-radius:7px;
+    padding:12px 14px;
+    height:180px;
+    overflow-y:auto;
+    font-size:11.5px;
+    line-height:1.65;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  #log .t{ color:#8f8871; }
+  #log .err{ color:#e08a72; }
+  #log .ok{ color:#8fc7a8; }
+  button.small{
+    padding:6px 11px;
+    font-size:11.5px;
+  }
+
+  footer{
+    text-align:center;
+    font-size:11px;
+    color:var(--ink-faint);
+    margin-top:28px;
+    line-height:1.6;
+  }
+  footer a{ color:var(--ink-soft); }
+
+  .unsupported{
+    background:#f6e6df;
+    border:1px solid var(--stamp-rust);
+    color:var(--stamp-rust-deep);
+    padding:14px 16px;
+    border-radius:8px;
+    font-size:13px;
+    margin-bottom:20px;
+    display:none;
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    button{ transition:none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="brand-eyebrow">Điều khiển qua Bluetooth</p>
+      <h1>EKCLOCK</h1>
+    </div>
+  </header>
+
+  <div class="unsupported" id="unsupportedBox">
+    Trình duyệt này không hỗ trợ Web Bluetooth. Hãy dùng Chrome/Edge trên máy tính hoặc Android
+    (Web Bluetooth hiện chưa hoạt động trên Safari/iOS).
+  </div>
+
+  <!-- Live device preview -->
+  <div class="device-shell">
+    <div class="device-screen">
+      <div>
+        <div class="device-status-line"><span class="device-status-dot" id="statusDot"></span><span id="statusText">Chưa kết nối</span></div>
+        <div class="device-date" id="previewDate">Thứ &nbsp;·&nbsp; --/--/----</div>
+      </div>
+      <div class="device-time" id="previewTime">--:--</div>
+    </div>
+  </div>
+
+  <!-- Connect -->
+  <section class="card">
+    <h2><span class="idx">01</span> Kết nối thiết bị</h2>
+    <p class="desc">Bấm để mở hộp thoại chọn thiết bị Bluetooth của trình duyệt, tìm tên bắt đầu bằng <strong>DLG-CLOCK</strong>.</p>
+    <div class="connect-row">
+      <button id="btnConnect">Kết nối</button>
+      <button id="btnDisconnect" class="secondary" disabled>Ngắt kết nối</button>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Tên thiết bị</div>
+        <div class="stat-value" id="devName">—</div>
+      </div>
+      <div class="stat live">
+        <div class="stat-label">Điện áp pin</div>
+        <div class="stat-value" id="devVolt">— V</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Giờ hệ thống (máy bạn)</div>
+        <div class="stat-value" id="sysTime">--:--:--</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sync time -->
+  <section class="card">
+    <h2><span class="idx">02</span> Đồng bộ thời gian</h2>
+    <p class="desc">Gửi ngày giờ hiện tại của máy bạn xuống thiết bị, kèm tính sẵn ngày âm lịch (thuật toán Hồ Ngọc Đức, múi giờ UTC+7).</p>
+    <button id="btnSync" class="wide" disabled>Đồng bộ giờ ngay</button>
+  </section>
+
+  <!-- Mode switch -->
+  <section class="card">
+    <h2><span class="idx">03</span> Đổi giao diện hiển thị</h2>
+    <p class="desc">Gửi lệnh chuyển sang giao diện tiếp theo trên màn hình (đồng hồ, lịch tháng, đồng hồ lật cơ, mặt kim...).</p>
+    <div class="actions-grid">
+      <button id="btnMode" disabled>Đổi giao diện</button>
+    </div>
+  </section>
+
+  <!-- Calibrate -->
+  <section class="card">
+    <h2><span class="idx">04</span> Hiệu chỉnh giờ nhanh</h2>
+    <p class="desc">Cộng/trừ một số giây vào đồng hồ thiết bị mà không cần đồng bộ lại toàn bộ ngày giờ.</p>
+    <div class="cal-row">
+      <label for="calSec">Số giây lệch</label>
+      <input type="number" id="calSec" value="0" step="1">
+      <button id="btnCal" disabled>Áp dụng</button>
+    </div>
+  </section>
+
+  <!-- Log -->
+  <section class="card">
+    <div class="log-head">
+      <h2 style="margin:0"><span class="idx">05</span> Nhật ký</h2>
+      <button class="secondary small" id="btnClearLog">Xoá nhật ký</button>
+    </div>
+    <div id="log">Đang chờ kết nối thiết bị…</div>
+  </section>
+
+  <footer>
+    Giao thức: dịch vụ BLE <code>0xFF00</code>, ghi lệnh qua đặc tính <code>0xFF01</code>, đọc điện áp qua <code>0xFF02</code>.<br>
+    Dựa trên firmware <a href="https://github.com/tpunix/HMCLOCK" target="_blank" rel="noopener">tpunix/HMCLOCK</a>.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------------------------------------------------------
+  // Hằng số giao thức BLE (khớp đúng user_custs1_def.c của firmware)
+  // ---------------------------------------------------------------
+  const SVC_UUID         = "0000ff00-0000-1000-8000-00805f9b34fb"; // dịch vụ chính
+  const CHAR_LONGVAL    = "0000ff01-0000-1000-8000-00805f9b34fb"; // ghi lệnh (đối thời/đổi giao diện/hiệu chỉnh)
+  const CHAR_ADCVAL     = "0000ff02-0000-1000-8000-00805f9b34fb"; // đọc điện áp pin (uint16 LE, đơn vị mV)
+
+  let device = null, gattServer = null, longValChar = null, adcChar = null;
+
+  // ---------------------------------------------------------------
+  // Tiện ích giao diện
+  // ---------------------------------------------------------------
+  const $ = (id) => document.getElementById(id);
+  const logEl = $("log");
+
+  function log(msg, kind){
+    const now = new Date();
+    const ts = now.toTimeString().slice(0,8);
+    const cls = kind ? (' class="'+kind+'"') : "";
+    logEl.innerHTML += `<span class="t">[${ts}]</span> <span${cls}>${msg}</span>\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  $("btnClearLog").addEventListener("click", () => { logEl.innerHTML = ""; });
+
+  function setConnectedUI(connected){
+    $("statusDot").classList.toggle("on", connected);
+    $("statusText").textContent = connected ? "Đã kết nối" : "Chưa kết nối";
+    $("btnConnect").disabled = connected;
+    $("btnDisconnect").disabled = !connected;
+    $("btnSync").disabled = !connected;
+    $("btnMode").disabled = !connected;
+    $("btnCal").disabled = !connected;
+    if(!connected){
+      $("devName").textContent = "—";
+      $("devVolt").textContent = "— V";
+    }
+  }
+
+  // Đồng hồ hệ thống + xem trước - chạy độc lập, không cần kết nối
+  function tickPreview(){
+    const now = new Date();
+    const wd = ["Chủ nhật","Thứ hai","Thứ ba","Thứ tư","Thứ năm","Thứ sáu","Thứ bảy"][now.getDay()];
+    const pad = (n) => String(n).padStart(2,"0");
+    $("sysTime").textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    $("previewDate").textContent = `${wd} · ${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`;
+    $("previewTime").textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  }
+  setInterval(tickPreview, 1000);
+  tickPreview();
+
+  // ---------------------------------------------------------------
+  // Lịch âm: thuật toán Hồ Ngọc Đức (chuẩn, dùng rộng rãi cho lịch
+  // âm Việt Nam) - múi giờ cố định UTC+7.
+  // ---------------------------------------------------------------
+  const TIMEZONE = 7;
+
+  function jdFromDate(dd, mm, yy){
+    let a = Math.floor((14-mm)/12);
+    let y = yy + 4800 - a;
+    let m = mm + 12*a - 3;
+    let jd = dd + Math.floor((153*m+2)/5) + 365*y + Math.floor(y/4) - Math.floor(y/100) + Math.floor(y/400) - 32045;
+    if(jd < 2299161){
+      jd = dd + Math.floor((153*m+2)/5) + 365*y + Math.floor(y/4) - 32083;
+    }
+    return jd;
+  }
+
+  function NewMoon(k){
+    return _NewMoonFull(k);
+  }
+
+  // Triển khai đầy đủ công thức tính điểm sóc (New Moon) theo thuật toán
+  // Hồ Ngọc Đức.
+  function _NewMoonFull(k){
+    const T = k/1236.85, T2 = T*T, T3 = T2*T, dr = Math.PI/180;
+    let Jd1 = 2415020.75933 + 29.53058868*k + 0.0001178*T2 - 0.000000155*T3;
+    Jd1 += 0.00033*Math.sin((166.56+132.87*T-0.009173*T2)*dr);
+    const M = 359.2242 + 29.10535608*k - 0.0000333*T2 - 0.00000347*T3;
+    const Mpr = 306.0253 + 385.81691806*k + 0.0107306*T2 + 0.00001236*T3;
+    const F = 21.2964 + 390.67050646*k - 0.0016528*T2 - 0.00000239*T3;
+    let C1 = (0.1734-0.000393*T)*Math.sin(M*dr) + 0.0021*Math.sin(2*dr*M);
+    C1 = C1 - 0.4068*Math.sin(Mpr*dr) + 0.0161*Math.sin(dr*2*Mpr);
+    C1 = C1 - 0.0004*Math.sin(dr*3*Mpr);
+    C1 = C1 + 0.0104*Math.sin(dr*2*F) - 0.0051*Math.sin(dr*(M+Mpr));
+    C1 = C1 - 0.0074*Math.sin(dr*(M-Mpr)) + 0.0004*Math.sin(dr*(2*F+M));
+    C1 = C1 - 0.0004*Math.sin(dr*(2*F-M)) - 0.0006*Math.sin(dr*(2*F+Mpr));
+    C1 = C1 + 0.0010*Math.sin(dr*(2*F-Mpr)) + 0.0005*Math.sin(dr*(2*Mpr+M));
+    let deltat;
+    if(T < -11){
+      deltat = 0.001 + 0.000839*T + 0.0002261*T2 - 0.00000845*T3 - 0.000000081*T*T3;
+    }else{
+      deltat = -0.000278 + 0.000265*T + 0.000262*T2;
+    }
+    return Jd1 + C1 - deltat;
+  }
+
+  function SunLongitude(jdn){
+    const T = (jdn-2451545.0)/36525, T2 = T*T, dr = Math.PI/180;
+    const M = 357.52910 + 35999.05030*T - 0.0001559*T2 - 0.00000048*T*T2;
+    const L0 = 280.46645 + 36000.76983*T + 0.0003032*T2;
+    let DL = (1.914600-0.004817*T-0.000014*T2)*Math.sin(dr*M);
+    DL += (0.019993-0.000101*T)*Math.sin(dr*2*M) + 0.000290*Math.sin(dr*3*M);
+    let L = (L0+DL)*dr;
+    L -= Math.PI*2*Math.floor(L/(Math.PI*2));
+    return Math.floor(L/Math.PI*6);
+  }
+
+  function getNewMoonDay(k, tz){ return Math.floor(_NewMoonFull(k) + 0.5 + tz/24); }
+  function getSunLongitude(dayNumber, tz){ return SunLongitude(dayNumber - 0.5 - tz/24); }
+
+  function getLunarMonth11(yy, tz){
+    const off = jdFromDate(31,12,yy) - 2415021.076998695;
+    const k = Math.floor(off/29.530588853);
+    let nm = getNewMoonDay(k, tz);
+    const sunLong = getSunLongitude(nm, tz);
+    if(sunLong >= 9){ nm = getNewMoonDay(k-1, tz); }
+    return nm;
+  }
+
+  function getLeapMonthOffset(a11, tz){
+    const k = Math.floor((a11-2415021.076998695)/29.530588853 + 0.5);
+    let last = 0, i = 1;
+    let arc = getSunLongitude(getNewMoonDay(k+i, tz), tz);
+    do{
+      last = arc;
+      i++;
+      arc = getSunLongitude(getNewMoonDay(k+i, tz), tz);
+    }while(arc !== last && i < 14);
+    return i-1;
+  }
+
+  // Trả về {day, month, year, leap(0/1)}
+  function solarToLunar(dd, mm, yy, tz){
+    const dayNumber = jdFromDate(dd, mm, yy);
+    const k = Math.floor((dayNumber-2415021.076998695)/29.530588853);
+    let monthStart = getNewMoonDay(k+1, tz);
+    if(monthStart > dayNumber){ monthStart = getNewMoonDay(k, tz); }
+    let a11 = getLunarMonth11(yy, tz);
+    let b11 = a11;
+    let lunarYear;
+    if(a11 >= monthStart){
+      lunarYear = yy;
+      a11 = getLunarMonth11(yy-1, tz);
+    }else{
+      lunarYear = yy+1;
+      b11 = getLunarMonth11(yy+1, tz);
+    }
+    const lunarDay = dayNumber - monthStart + 1;
+    const diff = Math.floor((monthStart-a11)/29);
+    let lunarLeap = 0;
+    let lunarMonth = diff + 11;
+    if(b11 - a11 > 365){
+      const leapMonthDiff = getLeapMonthOffset(a11, tz);
+      if(diff >= leapMonthDiff){
+        lunarMonth = diff + 10;
+        if(diff === leapMonthDiff){ lunarLeap = 1; }
+      }
+    }
+    if(lunarMonth > 12){ lunarMonth -= 12; }
+    if(lunarMonth >= 11 && diff < 4){ lunarYear -= 1; }
+    return {day:lunarDay, month:lunarMonth, year:lunarYear, leap:lunarLeap};
+  }
+
+  // ---------------------------------------------------------------
+  // Kết nối / ngắt kết nối
+  // ---------------------------------------------------------------
+  async function connect(){
+    try{
+      log("Đang mở hộp thoại chọn thiết bị…");
+      device = await navigator.bluetooth.requestDevice({
+        filters: [{ namePrefix: "DLG-CLOCK" }],
+        optionalServices: [SVC_UUID]
+      });
+      device.addEventListener("gattserverdisconnected", onDisconnected);
+
+      log(`Đang kết nối tới "${device.name || "(không tên)"}"…`);
+      gattServer = await device.gatt.connect();
+
+      const service = await gattServer.getPrimaryService(SVC_UUID);
+      longValChar = await service.getCharacteristic(CHAR_LONGVAL);
+      adcChar = await service.getCharacteristic(CHAR_ADCVAL);
+
+      $("devName").textContent = device.name || "(không tên)";
+      setConnectedUI(true);
+      log("Kết nối thành công.", "ok");
+
+      await readBattery();
+    }catch(err){
+      log("Lỗi kết nối: " + err.message, "err");
+      setConnectedUI(false);
+    }
+  }
+
+  function onDisconnected(){
+    log("Thiết bị đã ngắt kết nối.", "err");
+    setConnectedUI(false);
+  }
+
+  async function disconnect(){
+    if(device && device.gatt.connected){
+      device.gatt.disconnect();
+    }
+    setConnectedUI(false);
+  }
+
+  async function readBattery(){
+    try{
+      const val = await adcChar.readValue();
+      const mv = val.getUint16(0, true); // little-endian, đơn vị mV
+      $("devVolt").textContent = (mv/1000).toFixed(2) + " V";
+    }catch(err){
+      log("Không đọc được điện áp: " + err.message, "err");
+    }
+  }
+
+  async function writeCommand(bytes, label){
+    if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
+    try{
+      await longValChar.writeValueWithResponse(new Uint8Array(bytes));
+      log(label + " — đã gửi.", "ok");
+    }catch(err){
+      log(label + " — gửi thất bại: " + err.message, "err");
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Lệnh 0x91: đối thời (12 byte, xem clock_set() trong firmware)
+  // ---------------------------------------------------------------
+  async function syncTime(){
+    const now = new Date();
+    const yy = now.getFullYear(), mm = now.getMonth(), dd = now.getDate();
+    const lunar = solarToLunar(dd, mm+1, yy, TIMEZONE);
+    const lYearByte = lunar.year - 2020; // firmware lưu offset từ năm 2020
+    if(lYearByte < 0 || lYearByte > 255){
+      log("Năm âm lịch ngoài phạm vi thiết bị hỗ trợ (2020-2275).", "err");
+      return;
+    }
+    const buf = new Uint8Array(12);
+    buf[0] = 0x91;
+    buf[1] = yy & 0xff;
+    buf[2] = (yy >> 8) & 0xff;
+    buf[3] = mm;           // tháng dương, 0=Tháng 1 (đúng quy ước firmware)
+    buf[4] = dd;            // ngày dương, 1..31
+    buf[5] = now.getHours();
+    buf[6] = now.getMinutes();
+    buf[7] = now.getSeconds();
+    buf[8] = now.getDay();  // 0=Chủ nhật .. 6=Thứ bảy, khớp firmware
+    buf[9] = lYearByte;
+    buf[10] = lunar.month | (lunar.leap ? 0x80 : 0);
+    buf[11] = lunar.day;
+    log(`Âm lịch tính được: ${lunar.day}/${lunar.month}${lunar.leap?" (nhuận)":""}/${lunar.year}`);
+    await writeCommand(buf, "Đồng bộ giờ");
+  }
+
+  // ---------------------------------------------------------------
+  // Lệnh 0x90: đổi giao diện (1 byte)
+  // ---------------------------------------------------------------
+  async function switchMode(){
+    await writeCommand([0x90], "Đổi giao diện");
+  }
+
+  // ---------------------------------------------------------------
+  // Lệnh 0x92: hiệu chỉnh giờ (3 byte: cmd + int16 LE số giây lệch)
+  // ---------------------------------------------------------------
+  async function calibrate(){
+    let sec = parseInt($("calSec").value, 10);
+    if(isNaN(sec)){ sec = 0; }
+    sec = Math.max(-32768, Math.min(32767, sec));
+    const buf = new Uint8Array(3);
+    buf[0] = 0x92;
+    buf[1] = sec & 0xff;
+    buf[2] = (sec >> 8) & 0xff;
+    await writeCommand(buf, `Hiệu chỉnh ${sec >= 0 ? "+" : ""}${sec}s`);
+  }
+
+  // ---------------------------------------------------------------
+  // Gắn sự kiện
+  // ---------------------------------------------------------------
+  if(!navigator.bluetooth){
+    $("unsupportedBox").style.display = "block";
+    $("btnConnect").disabled = true;
+  }
+
+  $("btnConnect").addEventListener("click", connect);
+  $("btnDisconnect").addEventListener("click", disconnect);
+  $("btnSync").addEventListener("click", syncTime);
+  $("btnMode").addEventListener("click", switchMode);
+  $("btnCal").addEventListener("click", calibrate);
+
+  setConnectedUI(false);
+})();
+</script>
+</body>
+</html>
