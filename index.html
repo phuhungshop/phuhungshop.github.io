@@ -648,7 +648,15 @@
     buf[7] = now.getSeconds();
     buf[8] = now.getDay();  // 0=Chủ nhật .. 6=Thứ bảy, khớp firmware
     buf[9] = lYearByte;
-    buf[10] = lunar.month | (lunar.leap ? 0x80 : 0);
+    // BUG ĐÃ SỬA: firmware lưu l_month theo kiểu 0-indexed (0=tháng 1
+    // âm lịch...11=tháng 12), giống comment gốc trong clock_set():
+    // "l_month: 农历月份，0-11表示正月到腊月". lunar.month ở đây là số
+    // 1-12 (1-indexed) do solarToLunar() trả về, nên phải trừ 1 trước
+    // khi gửi — y hệt cách lunar.day cũng được firmware tự trừ 1 khi
+    // nhận (l_date = buf[11]-1). Trước đây thiếu bước trừ 1 này, làm
+    // tháng âm lịch hiển thị trên máy luôn bị dư đúng 1 tháng so với
+    // thực tế (ngày thì vẫn đúng, vì firmware tự xử lý phần đó).
+    buf[10] = (lunar.month - 1) | (lunar.leap ? 0x80 : 0);
     buf[11] = lunar.day;
     log(`Âm lịch tính được: ${lunar.day}/${lunar.month}${lunar.leap?" (nhuận)":""}/${lunar.year}`);
     await writeCommand(buf, "Đồng bộ giờ");
