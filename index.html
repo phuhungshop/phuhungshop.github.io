@@ -368,6 +368,15 @@
     </div>
   </section>
 
+  <!-- Flash diag (tạm thời, để đọc thông tin flash trước khi làm tính năng tải ảnh) -->
+  <section class="card">
+    <h2><span class="idx">03b</span> [Tạm thời] Xem thông tin Flash</h2>
+    <p class="desc">Nút tạm để đọc ID chip flash và địa chỉ 2 bản firmware, hiện lên màn hình — dùng để tính vùng flash an toàn cho tính năng tải ảnh sau này. Có thể xóa nút này sau khi dùng xong.</p>
+    <div class="actions-grid">
+      <button id="btnFlashDiag" disabled>Xem thông tin Flash (0x95)</button>
+    </div>
+  </section>
+
   <!-- Calibrate -->
   <section class="card">
     <h2><span class="idx">04</span> Hiệu chỉnh giờ nhanh</h2>
@@ -431,6 +440,7 @@
     $("btnDisconnect").disabled = !connected;
     $("btnSync").disabled = !connected;
     $("btnMode").disabled = !connected;
+    $("btnFlashDiag").disabled = !connected;
     $("btnCal").disabled = !connected;
     if(!connected){
       $("devName").textContent = "—";
@@ -662,6 +672,15 @@
   }
 
   // ---------------------------------------------------------------
+  // Lệnh 0x95: xem thông tin flash (tạm thời, dùng để chuẩn bị cho
+  // tính năng tải ảnh lên màn hình sau này — xem ID chip + địa chỉ
+  // firmware trước khi tính vùng flash an toàn để lưu ảnh)
+  // ---------------------------------------------------------------
+  async function flashDiag(){
+    await writeCommand([0x95], "Xem thông tin Flash");
+  }
+
+  // ---------------------------------------------------------------
   // Lệnh 0x92: hiệu chỉnh giờ (3 byte: cmd + int16 LE số giây lệch)
   // ---------------------------------------------------------------
   async function calibrate(){
@@ -687,6 +706,7 @@
   $("btnDisconnect").addEventListener("click", disconnect);
   $("btnSync").addEventListener("click", syncTime);
   $("btnMode").addEventListener("click", switchMode);
+  $("btnFlashDiag").addEventListener("click", flashDiag);
   $("btnCal").addEventListener("click", calibrate);
 
   setConnectedUI(false);
