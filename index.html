@@ -898,6 +898,20 @@
   // ---------------------------------------------------------------
   function sleep(ms){ return new Promise((r) => setTimeout(r, ms)); }
 
+  async function writeWithRetry(bytes, maxRetries){
+    let lastErr;
+    for(let attempt=0; attempt<=maxRetries; attempt++){
+      try{
+        await writeCommand(bytes);
+        return;
+      }catch(err){
+        lastErr = err;
+        await sleep(150); // chờ 1 chút trước khi thử lại, cho kết nối ổn định lại
+      }
+    }
+    throw lastErr;
+  }
+
   async function sendImage(){
     if(!packedImage){ log("Chưa có ảnh để gửi.", "err"); return; }
     if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
@@ -915,7 +929,7 @@
       startBuf[6] = (IMG_DATA_LEN>>8) & 0xff;
       startBuf[7] = (IMG_DATA_LEN>>16) & 0xff;
       startBuf[8] = (IMG_DATA_LEN>>24) & 0xff;
-      await writeCommand(startBuf);
+      await writeWithRetry(startBuf, 3);
       log("Đã gửi lệnh bắt đầu (0x96) - thiết bị đang xoá vùng nhớ…");
       await sleep(800); // chờ xoá xong các sector flash cần dùng
 
@@ -929,7 +943,8 @@
         buf[1] = i & 0xff;
         buf[2] = (i>>8) & 0xff;
         buf.set(chunkData, 3);
-        await writeCommand(buf);
+        await writeWithRetry(buf, 3); // thử lại tối đa 3 lần nếu gặp lỗi GATT tạm thời
+        await sleep(15); // nghỉ nhỏ giữa các gói - gửi liên tục quá nhanh dễ gây "GATT operation failed"
         $("sendProgress").value = Math.round((i+1)/totalChunks*90);
         if(i % 10 === 0){
           log(`Đã gửi gói ${i+1}/${totalChunks}…`);
@@ -943,7 +958,7 @@
       endBuf[2] = (crc>>8) & 0xff;
       endBuf[3] = (crc>>16) & 0xff;
       endBuf[4] = (crc>>24) & 0xff;
-      await writeCommand(endBuf);
+      await writeWithRetry(endBuf, 3);
       $("sendProgress").value = 100;
       log(`Đã gửi xong toàn bộ ${totalChunks} gói, CRC32=0x${crc.toString(16)}. Thiết bị đang hiển thị ảnh…`, "ok");
     }catch(err){
