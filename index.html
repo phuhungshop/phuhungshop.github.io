@@ -402,7 +402,7 @@
   <!-- Upload image -->
   <section class="card">
     <h2><span class="idx">04</span> Tải ảnh cá nhân lên màn hình</h2>
-    <p class="desc">Ảnh sẽ được cắt vừa khung 400×300, chuyển đen-trắng (dithering) để hiển thị đẹp trên màn e-paper. Ảnh lưu tại flash <code>0x3b000</code> của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
+    <p class="desc">Ảnh sẽ được cắt vừa khung 320×240, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash <code>0x3b000</code> của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
 
     <div class="drop-zone" id="dropZone">
       <div class="icon">🖼️</div>
@@ -421,11 +421,11 @@
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
         <div class="cap">Ảnh gốc (đã cắt)</div>
-        <canvas id="canvasOrig" width="400" height="300"></canvas>
+        <canvas id="canvasOrig" width="320" height="240"></canvas>
       </div>
       <div class="preview-box">
         <div class="cap">Xem trước trên e-paper</div>
-        <canvas id="canvasDither" width="400" height="300"></canvas>
+        <canvas id="canvasDither" width="320" height="240"></canvas>
       </div>
     </div>
 
@@ -476,12 +476,15 @@
   const CHAR_LONGVAL    = "0000ff01-0000-1000-8000-00805f9b34fb"; // ghi lệnh (đối thời/đổi giao diện/hiệu chỉnh/ảnh)
   const CHAR_ADCVAL     = "0000ff02-0000-1000-8000-00805f9b34fb"; // đọc điện áp pin (uint16 LE, đơn vị mV)
 
-  const IMG_W = 400, IMG_H = 300;
-  const IMG_DATA_LEN = (IMG_W*IMG_H)/8; // 15000 byte
+  const IMG_W = 320, IMG_H = 240; // Chế độ BWR (đen-trắng-đỏ) - đã thu nhỏ
+                                    // từ 400x300 để đủ chỗ cho cả 2 lớp
+                                    // màu trong ~20KB flash trống.
+  const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 9600 byte/lớp
+  const IMG_DATA_LEN = IMG_PLANE_LEN*2;  // 19200 byte (đen-trắng + đỏ)
   const IMG_CHUNK_SIZE = 128; // khớp firmware: 2 gói = đúng 1 trang flash 256 byte
 
   let device = null, gattServer = null, longValChar = null, adcChar = null;
-  let packedImage = null; // Uint8Array 15000 byte, sẵn sàng gửi
+  let packedImage = null; // Uint8Array 19200 byte (2 lớp BWR), sẵn sàng gửi
   let lastLoadedImg = null;
 
   // ---------------------------------------------------------------
@@ -768,49 +771,88 @@
     ctx.drawImage(img, dx, dy, dw, dh);
   }
 
+  // Bảng màu mục tiêu: trắng, đen, đỏ (đỏ trên e-paper thường tối hơn đỏ
+  // thuần trên màn hình máy tính, dùng giá trị gần thực tế hơn để phân
+  // loại chính xác hơn).
+  const BWR_PALETTE = [
+    {r:255, g:255, b:255, code:0}, // trắng
+    {r:0,   g:0,   b:0,   code:1}, // đen
+    {r:190, g:30,  b:30,  code:2}, // đỏ
+  ];
+
   function ditherAndPack(ctx, brightnessAdj){
     const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
     const px = imgData.data;
-    const gray = new Float32Array(IMG_W*IMG_H);
-    for(let i=0, p=0; i<gray.length; i++, p+=4){
-      let g = 0.299*px[p] + 0.587*px[p+1] + 0.114*px[p+2];
-      g += brightnessAdj;
-      gray[i] = g;
+    const n = IMG_W*IMG_H;
+    const errR = new Float32Array(n), errG = new Float32Array(n), errB = new Float32Array(n);
+    for(let i=0, p=0; i<n; i++, p+=4){
+      errR[i] = px[p]   + brightnessAdj;
+      errG[i] = px[p+1] + brightnessAdj;
+      errB[i] = px[p+2] + brightnessAdj;
     }
-    const bw = new Uint8Array(IMG_W*IMG_H); // 1=trắng, 0=đen
+    const classify = new Uint8Array(n); // 0=trắng, 1=đen, 2=đỏ
+
+    function diffuse(arr, x, y, e){
+      if(x+1<IMG_W)              arr[y*IMG_W+x+1]         += e*7/16;
+      if(x-1>=0 && y+1<IMG_H)    arr[(y+1)*IMG_W+x-1]      += e*3/16;
+      if(y+1<IMG_H)              arr[(y+1)*IMG_W+x]        += e*5/16;
+      if(x+1<IMG_W && y+1<IMG_H) arr[(y+1)*IMG_W+x+1]      += e*1/16;
+    }
+
     for(let y=0; y<IMG_H; y++){
       for(let x=0; x<IMG_W; x++){
         const idx = y*IMG_W+x;
-        const old = gray[idx];
-        const newV = old < 128 ? 0 : 255;
-        bw[idx] = newV ? 1 : 0;
-        const err = old - newV;
-        if(x+1<IMG_W)              gray[idx+1]        += err*7/16;
-        if(x-1>=0 && y+1<IMG_H)    gray[idx+IMG_W-1]   += err*3/16;
-        if(y+1<IMG_H)              gray[idx+IMG_W]     += err*5/16;
-        if(x+1<IMG_W && y+1<IMG_H) gray[idx+IMG_W+1]   += err*1/16;
+        const r = errR[idx], g = errG[idx], b = errB[idx];
+        // "Sắc đỏ" = kênh đỏ trội hơn hẳn xanh lá/xanh dương. Chỉ cho phép
+        // chọn đỏ làm ứng viên khi có sắc đỏ rõ rệt - nếu không, màu xám
+        // trung tính (vốn nằm giữa đen-trắng) dễ bị nhận nhầm thành đỏ vì
+        // khoảng cách RGB thuần đôi khi gần đỏ hơn cả đen lẫn trắng.
+        const redness = r - Math.max(g, b);
+        const candidates = redness > 40 ? BWR_PALETTE : [BWR_PALETTE[0], BWR_PALETTE[1]];
+        let best = 0, bestDist = Infinity;
+        for(const c of candidates){
+          const d = (r-c.r)*(r-c.r) + (g-c.g)*(g-c.g) + (b-c.b)*(b-c.b);
+          if(d < bestDist){ bestDist = d; best = c.code; }
+        }
+        classify[idx] = best;
+        const chosen = BWR_PALETTE[best];
+        diffuse(errR, x, y, r-chosen.r);
+        diffuse(errG, x, y, g-chosen.g);
+        diffuse(errB, x, y, b-chosen.b);
+      }
+    }
+
+    // Đóng gói thành 2 lớp: đen-trắng (bit=1 trừ khi là đen) và đỏ (bit=1
+    // khi là đỏ) - khớp đúng định dạng firmware mong đợi (lớp BW rồi tới
+    // lớp đỏ, mỗi lớp 9600 byte).
+    const bwPlane = new Uint8Array(IMG_PLANE_LEN);
+    const redPlane = new Uint8Array(IMG_PLANE_LEN);
+    for(let y=0; y<IMG_H; y++){
+      for(let xByte=0; xByte<IMG_W/8; xByte++){
+        let bwByte = 0, redByte = 0;
+        for(let b=0; b<8; b++){
+          const x = xByte*8+b;
+          const c = classify[y*IMG_W+x];
+          const bwBit = (c===1) ? 0 : 1;
+          const redBit = (c===2) ? 1 : 0;
+          bwByte  |= (bwBit<<(7-b));
+          redByte |= (redBit<<(7-b));
+        }
+        bwPlane[y*(IMG_W/8)+xByte]  = bwByte;
+        redPlane[y*(IMG_W/8)+xByte] = redByte;
       }
     }
     const packed = new Uint8Array(IMG_DATA_LEN);
-    for(let y=0; y<IMG_H; y++){
-      for(let xByte=0; xByte<IMG_W/8; xByte++){
-        let byteVal = 0;
-        for(let b=0; b<8; b++){
-          const x = xByte*8+b;
-          const bit = bw[y*IMG_W+x];
-          byteVal |= (bit<<(7-b));
-        }
-        packed[y*(IMG_W/8)+xByte] = byteVal;
-      }
-    }
-    return { packed, bw };
+    packed.set(bwPlane, 0);
+    packed.set(redPlane, IMG_PLANE_LEN);
+    return { packed, classify };
   }
 
-  function renderPreviewFromBW(ctx, bw){
+  function renderPreviewFromBW(ctx, classify){
     const imgData = ctx.createImageData(IMG_W, IMG_H);
-    for(let i=0;i<bw.length;i++){
-      const v = bw[i] ? 255 : 0;
-      imgData.data[i*4]=v; imgData.data[i*4+1]=v; imgData.data[i*4+2]=v; imgData.data[i*4+3]=255;
+    for(let i=0;i<classify.length;i++){
+      const c = BWR_PALETTE[classify[i]];
+      imgData.data[i*4]=c.r; imgData.data[i*4+1]=c.g; imgData.data[i*4+2]=c.b; imgData.data[i*4+3]=255;
     }
     ctx.putImageData(imgData,0,0);
   }
@@ -822,11 +864,11 @@
     drawFitted(img, ctxOrig, fitmode);
 
     const brightnessAdj = parseInt($("threshRange").value, 10);
-    const { packed, bw } = ditherAndPack(ctxOrig, brightnessAdj);
+    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj);
     packedImage = packed;
 
     const ctxDither = cDither.getContext("2d");
-    renderPreviewFromBW(ctxDither, bw);
+    renderPreviewFromBW(ctxDither, classify);
 
     $("previewGrid").style.display = "grid";
     updateSendBtn();
