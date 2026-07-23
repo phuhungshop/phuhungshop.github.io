@@ -421,11 +421,11 @@
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
         <div class="cap">Ảnh gốc (đã cắt)</div>
-        <canvas id="canvasOrig" width="320" height="240"></canvas>
+        <canvas id="canvasOrig" width="288" height="216"></canvas>
       </div>
       <div class="preview-box">
         <div class="cap">Xem trước trên e-paper</div>
-        <canvas id="canvasDither" width="320" height="240"></canvas>
+        <canvas id="canvasDither" width="288" height="216"></canvas>
       </div>
     </div>
 
@@ -476,10 +476,12 @@
   const CHAR_LONGVAL    = "0000ff01-0000-1000-8000-00805f9b34fb"; // ghi lệnh (đối thời/đổi giao diện/hiệu chỉnh/ảnh)
   const CHAR_ADCVAL     = "0000ff02-0000-1000-8000-00805f9b34fb"; // đọc điện áp pin (uint16 LE, đơn vị mV)
 
-  const IMG_W = 320, IMG_H = 240; // Chế độ BWR (đen-trắng-đỏ) - đã thu nhỏ
-                                    // từ 400x300 để đủ chỗ cho cả 2 lớp
-                                    // màu trong ~20KB flash trống.
-  const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 9600 byte/lớp
+  const IMG_W = 288, IMG_H = 216; // Chế độ BWR (đen-trắng-đỏ) - đã giảm từ
+                                    // 320x240 để chỉ cần đúng 4 sector flash
+                                    // (giống hệt vùng đã kiểm chứng của bản
+                                    // đen-trắng), tránh sector thứ 5 nghi
+                                    // ngờ gây treo máy không rõ nguyên nhân.
+  const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 7776 byte/lớp
   const IMG_DATA_LEN = IMG_PLANE_LEN*2;  // 19200 byte (đen-trắng + đỏ)
   const IMG_CHUNK_SIZE = 128; // khớp firmware: 2 gói = đúng 1 trang flash 256 byte
 
