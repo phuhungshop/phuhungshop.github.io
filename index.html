@@ -251,6 +251,37 @@
   .cal-row input:focus-visible{ outline:2px solid var(--focus); }
   .cal-row label{ font-size:12px; color:var(--ink-soft); }
 
+  /* ---------- Image upload ---------- */
+  .drop-zone{
+    border:2px dashed var(--rule); border-radius:10px; padding:28px 16px;
+    text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+    background:#fff;
+  }
+  .drop-zone:hover, .drop-zone.dragover{ border-color:var(--stamp-green); background:#f2f7f4; }
+  .drop-zone p{ margin:6px 0 0; font-size:12.5px; color:var(--ink-soft); }
+  .drop-zone .icon{ font-size:28px; }
+  input[type=file]{ display:none; }
+
+  .preview-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px; }
+  @media (max-width:520px){ .preview-grid{ grid-template-columns:1fr; } }
+  .preview-box{ text-align:center; }
+  .preview-box .cap{ font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:6px; }
+  .preview-box canvas{
+    width:100%; height:auto; background:#fff; border:1px solid var(--rule); border-radius:4px;
+    image-rendering:pixelated;
+  }
+
+  .opt-row{ display:flex; gap:16px; flex-wrap:wrap; margin:14px 0; font-size:12.5px; color:var(--ink-soft); }
+  .opt-row label{ display:flex; align-items:center; gap:6px; cursor:pointer; }
+
+  progress{
+    width:100%; height:16px; border-radius:8px; overflow:hidden; border:1px solid var(--rule);
+    appearance:none;
+  }
+  progress::-webkit-progress-bar{ background:#fff; }
+  progress::-webkit-progress-value{ background:var(--stamp-green); }
+  progress::-moz-progress-bar{ background:var(--stamp-green); }
+
   /* ---------- Log ---------- */
   .log-head{
     display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;
@@ -368,10 +399,49 @@
     </div>
   </section>
 
+  <!-- Upload image -->
+  <section class="card">
+    <h2><span class="idx">04</span> Tải ảnh cá nhân lên màn hình</h2>
+    <p class="desc">Ảnh sẽ được cắt vừa khung 400×300, chuyển đen-trắng (dithering) để hiển thị đẹp trên màn e-paper. Ảnh lưu tại flash <code>0x3b000</code> của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
+
+    <div class="drop-zone" id="dropZone">
+      <div class="icon">🖼️</div>
+      <p><strong>Bấm để chọn ảnh</strong> hoặc kéo-thả vào đây</p>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <div class="opt-row">
+      <label><input type="radio" name="fitmode" value="cover" checked> Lấp đầy khung (cắt bớt)</label>
+      <label><input type="radio" name="fitmode" value="contain"> Vừa khung (viền trắng)</label>
+    </div>
+    <div class="opt-row">
+      <label><input type="range" id="threshRange" min="-60" max="60" value="0" style="width:140px"> Điều chỉnh độ sáng/tối</label>
+    </div>
+
+    <div class="preview-grid" id="previewGrid" style="display:none">
+      <div class="preview-box">
+        <div class="cap">Ảnh gốc (đã cắt)</div>
+        <canvas id="canvasOrig" width="400" height="300"></canvas>
+      </div>
+      <div class="preview-box">
+        <div class="cap">Xem trước trên e-paper</div>
+        <canvas id="canvasDither" width="400" height="300"></canvas>
+      </div>
+    </div>
+
+    <div class="connect-row" style="margin-top:16px">
+      <button id="btnSend" class="wide" disabled>Gửi ảnh lên màn hình</button>
+    </div>
+    <progress id="sendProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
+    <div class="connect-row" style="margin-top:12px">
+      <button id="btnViewSaved" class="secondary" disabled>Xem lại ảnh đã lưu trên máy</button>
+    </div>
+  </section>
+
   <!-- Flash diag (tạm thời, để đọc thông tin flash trước khi làm tính năng tải ảnh) -->
   <section class="card">
-    <h2><span class="idx">03b</span> [Tạm thời] Xem thông tin Flash</h2>
-    <p class="desc">Nút tạm để đọc ID chip flash và địa chỉ 2 bản firmware, hiện lên màn hình — dùng để tính vùng flash an toàn cho tính năng tải ảnh sau này. Có thể xóa nút này sau khi dùng xong.</p>
+    <h2><span class="idx">04b</span> [Tạm thời] Xem thông tin Flash</h2>
+    <p class="desc">Nút tạm để đọc ID chip flash và địa chỉ 2 bản firmware, hiện lên màn hình — dùng để tính vùng flash an toàn cho tính năng tải ảnh. Có thể xóa nút này sau khi dùng xong.</p>
     <div class="actions-grid">
       <button id="btnFlashDiag" disabled>Xem thông tin Flash (0x95)</button>
     </div>
@@ -379,7 +449,7 @@
 
   <!-- Calibrate -->
   <section class="card">
-    <h2><span class="idx">04</span> Hiệu chỉnh giờ nhanh</h2>
+    <h2><span class="idx">05</span> Hiệu chỉnh giờ nhanh</h2>
     <p class="desc">Cộng/trừ một số giây vào đồng hồ thiết bị mà không cần đồng bộ lại toàn bộ ngày giờ.</p>
     <div class="cal-row">
       <label for="calSec">Số giây lệch</label>
@@ -391,7 +461,7 @@
   <!-- Log -->
   <section class="card">
     <div class="log-head">
-      <h2 style="margin:0"><span class="idx">05</span> Nhật ký</h2>
+      <h2 style="margin:0"><span class="idx">06</span> Nhật ký</h2>
       <button class="secondary small" id="btnClearLog">Xoá nhật ký</button>
     </div>
     <div id="log">Đang chờ kết nối thiết bị…</div>
@@ -412,10 +482,16 @@
   // Hằng số giao thức BLE (khớp đúng user_custs1_def.c của firmware)
   // ---------------------------------------------------------------
   const SVC_UUID         = "0000ff00-0000-1000-8000-00805f9b34fb"; // dịch vụ chính
-  const CHAR_LONGVAL    = "0000ff01-0000-1000-8000-00805f9b34fb"; // ghi lệnh (đối thời/đổi giao diện/hiệu chỉnh)
+  const CHAR_LONGVAL    = "0000ff01-0000-1000-8000-00805f9b34fb"; // ghi lệnh (đối thời/đổi giao diện/hiệu chỉnh/ảnh)
   const CHAR_ADCVAL     = "0000ff02-0000-1000-8000-00805f9b34fb"; // đọc điện áp pin (uint16 LE, đơn vị mV)
 
+  const IMG_W = 400, IMG_H = 300;
+  const IMG_DATA_LEN = (IMG_W*IMG_H)/8; // 15000 byte
+  const IMG_CHUNK_SIZE = 128; // khớp firmware: 2 gói = đúng 1 trang flash 256 byte
+
   let device = null, gattServer = null, longValChar = null, adcChar = null;
+  let packedImage = null; // Uint8Array 15000 byte, sẵn sàng gửi
+  let lastLoadedImg = null;
 
   // ---------------------------------------------------------------
   // Tiện ích giao diện
@@ -442,10 +518,16 @@
     $("btnMode").disabled = !connected;
     $("btnFlashDiag").disabled = !connected;
     $("btnCal").disabled = !connected;
+    $("btnViewSaved").disabled = !connected;
+    updateSendBtn();
     if(!connected){
       $("devName").textContent = "—";
       $("devVolt").textContent = "— V";
     }
+  }
+
+  function updateSendBtn(){
+    $("btnSend").disabled = !(device && device.gatt && device.gatt.connected && packedImage);
   }
 
   // Đồng hồ hệ thống + xem trước - chạy độc lập, không cần kết nối
@@ -477,12 +559,6 @@
     return jd;
   }
 
-  function NewMoon(k){
-    return _NewMoonFull(k);
-  }
-
-  // Triển khai đầy đủ công thức tính điểm sóc (New Moon) theo thuật toán
-  // Hồ Ngọc Đức.
   function _NewMoonFull(k){
     const T = k/1236.85, T2 = T*T, T3 = T2*T, dr = Math.PI/180;
     let Jd1 = 2415020.75933 + 29.53058868*k + 0.0001178*T2 - 0.000000155*T3;
@@ -541,7 +617,6 @@
     return i-1;
   }
 
-  // Trả về {day, month, year, leap(0/1)}
   function solarToLunar(dd, mm, yy, tz){
     const dayNumber = jdFromDate(dd, mm, yy);
     const k = Math.floor((dayNumber-2415021.076998695)/29.530588853);
@@ -629,9 +704,10 @@
     if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
     try{
       await longValChar.writeValueWithResponse(new Uint8Array(bytes));
-      log(label + " — đã gửi.", "ok");
+      if(label) log(label + " — đã gửi.", "ok");
     }catch(err){
-      log(label + " — gửi thất bại: " + err.message, "err");
+      if(label) log(label + " — gửi thất bại: " + err.message, "err");
+      throw err;
     }
   }
 
@@ -672,9 +748,7 @@
   }
 
   // ---------------------------------------------------------------
-  // Lệnh 0x95: xem thông tin flash (tạm thời, dùng để chuẩn bị cho
-  // tính năng tải ảnh lên màn hình sau này — xem ID chip + địa chỉ
-  // firmware trước khi tính vùng flash an toàn để lưu ảnh)
+  // Lệnh 0x95: xem thông tin flash (tạm thời)
   // ---------------------------------------------------------------
   async function flashDiag(){
     await writeCommand([0x95], "Xem thông tin Flash");
@@ -695,6 +769,212 @@
   }
 
   // ---------------------------------------------------------------
+  // Xử lý ảnh: cắt vừa khung, chuyển xám, Floyd-Steinberg dithering,
+  // đóng gói 1-bit MSB-trước (khớp định dạng fb_bw của firmware:
+  // 50 byte/dòng x 300 dòng, bit=0 là ĐEN, bit=1 là TRẮNG).
+  // ---------------------------------------------------------------
+  function drawFitted(img, ctx, mode){
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0,0,IMG_W,IMG_H);
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    const scaleCover = Math.max(IMG_W/iw, IMG_H/ih);
+    const scaleContain = Math.min(IMG_W/iw, IMG_H/ih);
+    const scale = (mode==="contain") ? scaleContain : scaleCover;
+    const dw = iw*scale, dh = ih*scale;
+    const dx = (IMG_W-dw)/2, dy = (IMG_H-dh)/2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+  }
+
+  function ditherAndPack(ctx, brightnessAdj){
+    const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
+    const px = imgData.data;
+    const gray = new Float32Array(IMG_W*IMG_H);
+    for(let i=0, p=0; i<gray.length; i++, p+=4){
+      let g = 0.299*px[p] + 0.587*px[p+1] + 0.114*px[p+2];
+      g += brightnessAdj;
+      gray[i] = g;
+    }
+    const bw = new Uint8Array(IMG_W*IMG_H); // 1=trắng, 0=đen
+    for(let y=0; y<IMG_H; y++){
+      for(let x=0; x<IMG_W; x++){
+        const idx = y*IMG_W+x;
+        const old = gray[idx];
+        const newV = old < 128 ? 0 : 255;
+        bw[idx] = newV ? 1 : 0;
+        const err = old - newV;
+        if(x+1<IMG_W)              gray[idx+1]        += err*7/16;
+        if(x-1>=0 && y+1<IMG_H)    gray[idx+IMG_W-1]   += err*3/16;
+        if(y+1<IMG_H)              gray[idx+IMG_W]     += err*5/16;
+        if(x+1<IMG_W && y+1<IMG_H) gray[idx+IMG_W+1]   += err*1/16;
+      }
+    }
+    const packed = new Uint8Array(IMG_DATA_LEN);
+    for(let y=0; y<IMG_H; y++){
+      for(let xByte=0; xByte<IMG_W/8; xByte++){
+        let byteVal = 0;
+        for(let b=0; b<8; b++){
+          const x = xByte*8+b;
+          const bit = bw[y*IMG_W+x];
+          byteVal |= (bit<<(7-b));
+        }
+        packed[y*(IMG_W/8)+xByte] = byteVal;
+      }
+    }
+    return { packed, bw };
+  }
+
+  function renderPreviewFromBW(ctx, bw){
+    const imgData = ctx.createImageData(IMG_W, IMG_H);
+    for(let i=0;i<bw.length;i++){
+      const v = bw[i] ? 255 : 0;
+      imgData.data[i*4]=v; imgData.data[i*4+1]=v; imgData.data[i*4+2]=v; imgData.data[i*4+3]=255;
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+
+  function processImage(img){
+    const cOrig = $("canvasOrig"), cDither = $("canvasDither");
+    const ctxOrig = cOrig.getContext("2d");
+    const fitmode = document.querySelector('input[name=fitmode]:checked').value;
+    drawFitted(img, ctxOrig, fitmode);
+
+    const brightnessAdj = parseInt($("threshRange").value, 10);
+    const { packed, bw } = ditherAndPack(ctxOrig, brightnessAdj);
+    packedImage = packed;
+
+    const ctxDither = cDither.getContext("2d");
+    renderPreviewFromBW(ctxDither, bw);
+
+    $("previewGrid").style.display = "grid";
+    updateSendBtn();
+  }
+
+  function handleFile(file){
+    if(!file || !file.type.startsWith("image/")){
+      log("Vui lòng chọn 1 file ảnh.", "err");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        lastLoadedImg = img;
+        processImage(img);
+        log("Đã xử lý ảnh, xem trước bên dưới.", "ok");
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  $("fileInput").addEventListener("change", (e) => {
+    if(e.target.files[0]) handleFile(e.target.files[0]);
+  });
+  $("dropZone").addEventListener("click", () => $("fileInput").click());
+  $("dropZone").addEventListener("dragover", (e) => { e.preventDefault(); $("dropZone").classList.add("dragover"); });
+  $("dropZone").addEventListener("dragleave", () => $("dropZone").classList.remove("dragover"));
+  $("dropZone").addEventListener("drop", (e) => {
+    e.preventDefault();
+    $("dropZone").classList.remove("dragover");
+    if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  document.querySelectorAll('input[name=fitmode]').forEach((el) => {
+    el.addEventListener("change", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
+  });
+  $("threshRange").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
+
+  // ---------------------------------------------------------------
+  // CRC32 chuẩn (IEEE 802.3 / zlib) - khớp đúng hàm crc32() trong
+  // spi_flash.c của firmware (đã đối chiếu bảng hệ số, trùng khớp).
+  // ---------------------------------------------------------------
+  let crcTable = null;
+  function makeCrcTable(){
+    const table = new Uint32Array(256);
+    for(let n=0; n<256; n++){
+      let c = n;
+      for(let k=0; k<8; k++){
+        c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      }
+      table[n] = c;
+    }
+    return table;
+  }
+  function crc32(buf){
+    if(!crcTable) crcTable = makeCrcTable();
+    let crc = 0 ^ 0xFFFFFFFF;
+    for(let i=0; i<buf.length; i++){
+      crc = crcTable[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  // ---------------------------------------------------------------
+  // Gửi ảnh: 0x96 (bắt đầu) -> nhiều gói 0x97 (128 byte/gói) -> 0x98
+  // (kết thúc + CRC32). Xem chi tiết giao thức trong user_custs1_impl.c
+  // của firmware (img_transfer_start/chunk/end).
+  // ---------------------------------------------------------------
+  function sleep(ms){ return new Promise((r) => setTimeout(r, ms)); }
+
+  async function sendImage(){
+    if(!packedImage){ log("Chưa có ảnh để gửi.", "err"); return; }
+    if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
+
+    $("btnSend").disabled = true;
+    $("sendProgress").style.display = "block";
+    $("sendProgress").value = 0;
+
+    try{
+      const startBuf = new Uint8Array(9);
+      startBuf[0] = 0x96;
+      startBuf[1] = IMG_W & 0xff; startBuf[2] = (IMG_W>>8) & 0xff;
+      startBuf[3] = IMG_H & 0xff; startBuf[4] = (IMG_H>>8) & 0xff;
+      startBuf[5] = IMG_DATA_LEN & 0xff;
+      startBuf[6] = (IMG_DATA_LEN>>8) & 0xff;
+      startBuf[7] = (IMG_DATA_LEN>>16) & 0xff;
+      startBuf[8] = (IMG_DATA_LEN>>24) & 0xff;
+      await writeCommand(startBuf);
+      log("Đã gửi lệnh bắt đầu (0x96) - thiết bị đang xoá vùng nhớ…");
+      await sleep(800); // chờ xoá xong các sector flash cần dùng
+
+      const totalChunks = Math.ceil(IMG_DATA_LEN/IMG_CHUNK_SIZE);
+      for(let i=0; i<totalChunks; i++){
+        const off = i*IMG_CHUNK_SIZE;
+        const end = Math.min(off+IMG_CHUNK_SIZE, IMG_DATA_LEN);
+        const chunkData = packedImage.slice(off, end);
+        const buf = new Uint8Array(3+chunkData.length);
+        buf[0] = 0x97;
+        buf[1] = i & 0xff;
+        buf[2] = (i>>8) & 0xff;
+        buf.set(chunkData, 3);
+        await writeCommand(buf);
+        $("sendProgress").value = Math.round((i+1)/totalChunks*90);
+        if(i % 10 === 0){
+          log(`Đã gửi gói ${i+1}/${totalChunks}…`);
+        }
+      }
+
+      const crc = crc32(packedImage);
+      const endBuf = new Uint8Array(5);
+      endBuf[0] = 0x98;
+      endBuf[1] = crc & 0xff;
+      endBuf[2] = (crc>>8) & 0xff;
+      endBuf[3] = (crc>>16) & 0xff;
+      endBuf[4] = (crc>>24) & 0xff;
+      await writeCommand(endBuf);
+      $("sendProgress").value = 100;
+      log(`Đã gửi xong toàn bộ ${totalChunks} gói, CRC32=0x${crc.toString(16)}. Thiết bị đang hiển thị ảnh…`, "ok");
+    }catch(err){
+      log("Lỗi khi gửi ảnh: " + err.message, "err");
+    }finally{
+      updateSendBtn();
+    }
+  }
+
+  async function viewSaved(){
+    await writeCommand([0x99], "Xem lại ảnh đã lưu");
+  }
+
+  // ---------------------------------------------------------------
   // Gắn sự kiện
   // ---------------------------------------------------------------
   if(!navigator.bluetooth){
@@ -708,6 +988,8 @@
   $("btnMode").addEventListener("click", switchMode);
   $("btnFlashDiag").addEventListener("click", flashDiag);
   $("btnCal").addEventListener("click", calibrate);
+  $("btnSend").addEventListener("click", sendImage);
+  $("btnViewSaved").addEventListener("click", viewSaved);
 
   setConnectedUI(false);
 })();
