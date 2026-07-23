@@ -438,15 +438,6 @@
     </div>
   </section>
 
-  <!-- Flash diag (tạm thời, để đọc thông tin flash trước khi làm tính năng tải ảnh) -->
-  <section class="card">
-    <h2><span class="idx">04b</span> [Tạm thời] Xem thông tin Flash</h2>
-    <p class="desc">Nút tạm để đọc ID chip flash và địa chỉ 2 bản firmware, hiện lên màn hình — dùng để tính vùng flash an toàn cho tính năng tải ảnh. Có thể xóa nút này sau khi dùng xong.</p>
-    <div class="actions-grid">
-      <button id="btnFlashDiag" disabled>Xem thông tin Flash (0x95)</button>
-    </div>
-  </section>
-
   <!-- Calibrate -->
   <section class="card">
     <h2><span class="idx">05</span> Hiệu chỉnh giờ nhanh</h2>
@@ -516,7 +507,6 @@
     $("btnDisconnect").disabled = !connected;
     $("btnSync").disabled = !connected;
     $("btnMode").disabled = !connected;
-    $("btnFlashDiag").disabled = !connected;
     $("btnCal").disabled = !connected;
     $("btnViewSaved").disabled = !connected;
     updateSendBtn();
@@ -745,13 +735,6 @@
   // ---------------------------------------------------------------
   async function switchMode(){
     await writeCommand([0x90], "Đổi giao diện");
-  }
-
-  // ---------------------------------------------------------------
-  // Lệnh 0x95: xem thông tin flash (tạm thời)
-  // ---------------------------------------------------------------
-  async function flashDiag(){
-    await writeCommand([0x95], "Xem thông tin Flash");
   }
 
   // ---------------------------------------------------------------
@@ -986,7 +969,6 @@
   $("btnDisconnect").addEventListener("click", disconnect);
   $("btnSync").addEventListener("click", syncTime);
   $("btnMode").addEventListener("click", switchMode);
-  $("btnFlashDiag").addEventListener("click", flashDiag);
   $("btnCal").addEventListener("click", calibrate);
   $("btnSend").addEventListener("click", sendImage);
   $("btnViewSaved").addEventListener("click", viewSaved);
