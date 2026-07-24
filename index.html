@@ -424,6 +424,45 @@
     </div>
   </section>
 
+  <!-- Upload image -->
+  <section class="card">
+    <h2><span class="idx">04b</span> Tải ảnh cá nhân lên màn hình</h2>
+    <p class="desc">Ảnh sẽ được cắt vừa khung 168×126, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash của thiết bị (dùng chung vùng nhớ với "Vẽ tay" ở trên — chỉ giữ được 1 trong 2, cái nào gửi/vẽ sau sẽ ghi đè cái trước), xem lại bất cứ lúc nào không cần gửi lại.</p>
+
+    <div class="drop-zone" id="dropZone">
+      <div class="icon">🖼️</div>
+      <p><strong>Bấm để chọn ảnh</strong> hoặc kéo-thả vào đây</p>
+      <input type="file" id="fileInput" accept="image/*">
+    </div>
+
+    <div class="opt-row">
+      <label><input type="radio" name="fitmode" value="cover" checked> Lấp đầy khung (cắt bớt)</label>
+      <label><input type="radio" name="fitmode" value="contain"> Vừa khung (viền trắng)</label>
+    </div>
+    <div class="opt-row">
+      <label><input type="range" id="threshRange" min="-60" max="60" value="0" style="width:140px"> Điều chỉnh độ sáng/tối</label>
+    </div>
+
+    <div class="preview-grid" id="previewGrid" style="display:none">
+      <div class="preview-box">
+        <div class="cap">Ảnh gốc (đã cắt)</div>
+        <canvas id="canvasOrig" width="168" height="126"></canvas>
+      </div>
+      <div class="preview-box">
+        <div class="cap">Xem trước trên e-paper</div>
+        <canvas id="canvasDither" width="168" height="126"></canvas>
+      </div>
+    </div>
+
+    <div class="connect-row" style="margin-top:16px">
+      <button id="btnSendImg" class="wide" disabled>Gửi ảnh lên màn hình</button>
+    </div>
+    <progress id="sendImgProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
+    <div class="connect-row" style="margin-top:12px">
+      <button id="btnViewSavedImg" class="secondary" disabled>Xem lại ảnh đã lưu trên máy</button>
+    </div>
+  </section>
+
   <!-- Calibrate -->
   <section class="card">
     <h2><span class="idx">05</span> Hiệu chỉnh giờ nhanh</h2>
@@ -489,7 +528,9 @@
     $("btnMode").disabled = !connected;
     $("btnCal").disabled = !connected;
     $("btnViewSaved").disabled = !connected;
+    $("btnViewSavedImg").disabled = !connected;
     updateSendBtn();
+    updateSendImgBtn();
     if(!connected){
       $("devName").textContent = "—";
       $("devVolt").textContent = "— V";
@@ -928,6 +969,254 @@
 
 
   // ---------------------------------------------------------------
+  // Tải ảnh cá nhân: cắt vừa khung, chuyển xám, Floyd-Steinberg
+  // dithering, đóng gói 1-bit MSB-trước (khớp định dạng fb_bw của
+  // firmware: IMG_W/8 byte/dòng x IMG_H dòng, bit=0 là ĐEN, bit=1 là
+  // TRẮNG). Dùng chung 1 bộ giao thức với "Vẽ tay" ở trên nhưng lệnh
+  // khác (0x96-0x99 thay vì 0x9A-0x9D), 2 tính năng độc lập với nhau,
+  // chỉ dùng chung 1 vùng flash trên thiết bị (ai gửi/vẽ sau sẽ ghi
+  // đè người trước).
+  // ---------------------------------------------------------------
+  const IMG_W = 168, IMG_H = 126;
+  const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 2646 byte/lớp
+  const IMG_DATA_LEN = IMG_PLANE_LEN*2;  // 5292 byte (đen-trắng + đỏ)
+  const IMG_CHUNK_SIZE = 128; // khớp firmware: 2 gói = đúng 1 trang flash 256 byte
+
+  let packedImage = null;
+  let lastLoadedImg = null;
+
+  function updateSendImgBtn(){
+    $("btnSendImg").disabled = !(device && device.gatt && device.gatt.connected && packedImage);
+  }
+
+  function drawFitted(img, ctx, mode){
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0,0,IMG_W,IMG_H);
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    const scaleCover = Math.max(IMG_W/iw, IMG_H/ih);
+    const scaleContain = Math.min(IMG_W/iw, IMG_H/ih);
+    const scale = (mode==="contain") ? scaleContain : scaleCover;
+    const dw = iw*scale, dh = ih*scale;
+    const dx = (IMG_W-dw)/2, dy = (IMG_H-dh)/2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+  }
+
+  // Bảng màu mục tiêu: trắng, đen, đỏ (đỏ trên e-paper thường tối hơn đỏ
+  // thuần trên màn hình máy tính, dùng giá trị gần thực tế hơn để phân
+  // loại chính xác hơn).
+  const BWR_PALETTE = [
+    {r:255, g:255, b:255, code:0}, // trắng
+    {r:0,   g:0,   b:0,   code:1}, // đen
+    {r:190, g:30,  b:30,  code:2}, // đỏ
+  ];
+
+  function ditherAndPack(ctx, brightnessAdj){
+    const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
+    const px = imgData.data;
+    const n = IMG_W*IMG_H;
+    const errR = new Float32Array(n), errG = new Float32Array(n), errB = new Float32Array(n);
+    for(let i=0, p=0; i<n; i++, p+=4){
+      errR[i] = px[p]   + brightnessAdj;
+      errG[i] = px[p+1] + brightnessAdj;
+      errB[i] = px[p+2] + brightnessAdj;
+    }
+    const classify = new Uint8Array(n); // 0=trắng, 1=đen, 2=đỏ
+
+    function diffuse(arr, x, y, e){
+      if(x+1<IMG_W)              arr[y*IMG_W+x+1]         += e*7/16;
+      if(x-1>=0 && y+1<IMG_H)    arr[(y+1)*IMG_W+x-1]      += e*3/16;
+      if(y+1<IMG_H)              arr[(y+1)*IMG_W+x]        += e*5/16;
+      if(x+1<IMG_W && y+1<IMG_H) arr[(y+1)*IMG_W+x+1]      += e*1/16;
+    }
+
+    for(let y=0; y<IMG_H; y++){
+      for(let x=0; x<IMG_W; x++){
+        const idx = y*IMG_W+x;
+        const r = errR[idx], g = errG[idx], b = errB[idx];
+        // "Sắc đỏ" = kênh đỏ trội hơn hẳn xanh lá/xanh dương. Chỉ cho phép
+        // chọn đỏ làm ứng viên khi có sắc đỏ rõ rệt.
+        const redness = r - Math.max(g, b);
+        const candidates = redness > 40 ? BWR_PALETTE : [BWR_PALETTE[0], BWR_PALETTE[1]];
+        let best = 0, bestDist = Infinity;
+        for(const c of candidates){
+          const d = (r-c.r)*(r-c.r) + (g-c.g)*(g-c.g) + (b-c.b)*(b-c.b);
+          if(d < bestDist){ bestDist = d; best = c.code; }
+        }
+        classify[idx] = best;
+        const chosen = BWR_PALETTE[best];
+        diffuse(errR, x, y, r-chosen.r);
+        diffuse(errG, x, y, g-chosen.g);
+        diffuse(errB, x, y, b-chosen.b);
+      }
+    }
+
+    const bwPlane = new Uint8Array(IMG_PLANE_LEN);
+    const redPlane = new Uint8Array(IMG_PLANE_LEN);
+    for(let y=0; y<IMG_H; y++){
+      for(let xByte=0; xByte<IMG_W/8; xByte++){
+        let bwByte = 0, redByte = 0;
+        for(let b=0; b<8; b++){
+          const x = xByte*8+b;
+          const c = classify[y*IMG_W+x];
+          const bwBit = (c===1) ? 0 : 1;
+          const redBit = (c===2) ? 1 : 0;
+          bwByte  |= (bwBit<<(7-b));
+          redByte |= (redBit<<(7-b));
+        }
+        bwPlane[y*(IMG_W/8)+xByte]  = bwByte;
+        redPlane[y*(IMG_W/8)+xByte] = redByte;
+      }
+    }
+    const packed = new Uint8Array(IMG_DATA_LEN);
+    packed.set(bwPlane, 0);
+    packed.set(redPlane, IMG_PLANE_LEN);
+    return { packed, classify };
+  }
+
+  function renderPreviewFromBW(ctx, classify){
+    const imgData = ctx.createImageData(IMG_W, IMG_H);
+    for(let i=0;i<classify.length;i++){
+      const c = BWR_PALETTE[classify[i]];
+      imgData.data[i*4]=c.r; imgData.data[i*4+1]=c.g; imgData.data[i*4+2]=c.b; imgData.data[i*4+3]=255;
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+
+  function processImage(img){
+    const cOrig = $("canvasOrig"), cDither = $("canvasDither");
+    const ctxOrig = cOrig.getContext("2d");
+    const fitmode = document.querySelector('input[name=fitmode]:checked').value;
+    drawFitted(img, ctxOrig, fitmode);
+
+    const brightnessAdj = parseInt($("threshRange").value, 10);
+    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj);
+    packedImage = packed;
+
+    const ctxDither = cDither.getContext("2d");
+    renderPreviewFromBW(ctxDither, classify);
+
+    $("previewGrid").style.display = "grid";
+    updateSendImgBtn();
+  }
+
+  function handleFile(file){
+    if(!file || !file.type.startsWith("image/")){
+      log("Vui lòng chọn 1 file ảnh.", "err");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        lastLoadedImg = img;
+        processImage(img);
+        log("Đã xử lý ảnh, xem trước bên dưới.", "ok");
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  $("fileInput").addEventListener("change", (e) => {
+    if(e.target.files[0]) handleFile(e.target.files[0]);
+  });
+  $("dropZone").addEventListener("click", () => $("fileInput").click());
+  $("dropZone").addEventListener("dragover", (e) => { e.preventDefault(); $("dropZone").classList.add("dragover"); });
+  $("dropZone").addEventListener("dragleave", () => $("dropZone").classList.remove("dragover"));
+  $("dropZone").addEventListener("drop", (e) => {
+    e.preventDefault();
+    $("dropZone").classList.remove("dragover");
+    if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  document.querySelectorAll('input[name=fitmode]').forEach((el) => {
+    el.addEventListener("change", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
+  });
+  $("threshRange").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
+
+  // CRC32 chuẩn (IEEE 802.3/zlib), khớp hàm img_crc32_update() bên firmware
+  let crcTable = null;
+  function makeCrcTable(){
+    const table = new Uint32Array(256);
+    for(let n=0; n<256; n++){
+      let c = n;
+      for(let k=0; k<8; k++){
+        c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      }
+      table[n] = c;
+    }
+    return table;
+  }
+  function crc32(buf){
+    if(!crcTable) crcTable = makeCrcTable();
+    let crc = 0 ^ 0xFFFFFFFF;
+    for(let i=0; i<buf.length; i++){
+      crc = crcTable[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  async function sendImage(){
+    if(!packedImage){ log("Chưa có ảnh để gửi.", "err"); return; }
+    if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
+
+    $("btnSendImg").disabled = true;
+    $("sendImgProgress").style.display = "block";
+    $("sendImgProgress").value = 0;
+
+    try{
+      const startBuf = new Uint8Array(9);
+      startBuf[0] = 0x96;
+      startBuf[1] = IMG_W & 0xff; startBuf[2] = (IMG_W>>8) & 0xff;
+      startBuf[3] = IMG_H & 0xff; startBuf[4] = (IMG_H>>8) & 0xff;
+      startBuf[5] = IMG_DATA_LEN & 0xff;
+      startBuf[6] = (IMG_DATA_LEN>>8) & 0xff;
+      startBuf[7] = (IMG_DATA_LEN>>16) & 0xff;
+      startBuf[8] = (IMG_DATA_LEN>>24) & 0xff;
+      await writeWithRetry(startBuf, 3);
+      log("Đã gửi lệnh bắt đầu (0x96) - thiết bị đang xoá vùng nhớ…");
+      await sleep(800);
+
+      const totalChunks = Math.ceil(IMG_DATA_LEN/IMG_CHUNK_SIZE);
+      for(let i=0; i<totalChunks; i++){
+        const off = i*IMG_CHUNK_SIZE;
+        const end = Math.min(off+IMG_CHUNK_SIZE, IMG_DATA_LEN);
+        const chunkData = packedImage.slice(off, end);
+        const buf = new Uint8Array(3+chunkData.length);
+        buf[0] = 0x97;
+        buf[1] = i & 0xff;
+        buf[2] = (i>>8) & 0xff;
+        buf.set(chunkData, 3);
+        await writeWithRetry(buf, 3);
+        await sleep(15);
+        $("sendImgProgress").value = Math.round((i+1)/totalChunks*90);
+        if(i % 10 === 0){
+          log(`Đã gửi gói ${i+1}/${totalChunks}…`);
+        }
+      }
+
+      const crc = crc32(packedImage);
+      const endBuf = new Uint8Array(5);
+      endBuf[0] = 0x98;
+      endBuf[1] = crc & 0xff;
+      endBuf[2] = (crc>>8) & 0xff;
+      endBuf[3] = (crc>>16) & 0xff;
+      endBuf[4] = (crc>>24) & 0xff;
+      await writeWithRetry(endBuf, 3);
+      $("sendImgProgress").value = 100;
+      log(`Đã gửi xong toàn bộ ${totalChunks} gói, CRC32=0x${crc.toString(16)}. Thiết bị đang hiển thị ảnh…`, "ok");
+    }catch(err){
+      log("Lỗi khi gửi ảnh: " + err.message, "err");
+    }finally{
+      updateSendImgBtn();
+    }
+  }
+
+  async function viewSavedImg(){
+    await writeCommand([0x99], "Xem lại ảnh đã lưu");
+  }
+
+
+  // ---------------------------------------------------------------
   // Gắn sự kiện
   // ---------------------------------------------------------------
   if(!navigator.bluetooth){
@@ -942,6 +1231,8 @@
   $("btnCal").addEventListener("click", calibrate);
   $("btnSend").addEventListener("click", sendDrawing);
   $("btnViewSaved").addEventListener("click", viewSaved);
+  $("btnSendImg").addEventListener("click", sendImage);
+  $("btnViewSavedImg").addEventListener("click", viewSavedImg);
 
   setConnectedUI(false);
 })();
