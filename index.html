@@ -402,7 +402,7 @@
   <!-- Upload image -->
   <section class="card">
     <h2><span class="idx">04</span> Tải ảnh cá nhân lên màn hình</h2>
-    <p class="desc">Ảnh sẽ được cắt vừa khung 128×96, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
+    <p class="desc">Ảnh sẽ được cắt vừa khung 168×126, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
 
     <div class="drop-zone" id="dropZone">
       <div class="icon">🖼️</div>
@@ -421,11 +421,11 @@
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
         <div class="cap">Ảnh gốc (đã cắt)</div>
-        <canvas id="canvasOrig" width="128" height="96"></canvas>
+        <canvas id="canvasOrig" width="168" height="126"></canvas>
       </div>
       <div class="preview-box">
         <div class="cap">Xem trước trên e-paper</div>
-        <canvas id="canvasDither" width="128" height="96"></canvas>
+        <canvas id="canvasDither" width="168" height="126"></canvas>
       </div>
     </div>
 
@@ -770,7 +770,7 @@
   // chỉ dùng chung 1 vùng flash trên thiết bị (ai gửi/vẽ sau sẽ ghi
   // đè người trước).
   // ---------------------------------------------------------------
-  const IMG_W = 128, IMG_H = 96;
+  const IMG_W = 168, IMG_H = 126;
   const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 2646 byte/lớp
   const IMG_DATA_LEN = IMG_PLANE_LEN*2;  // 5292 byte (đen-trắng + đỏ)
   const IMG_CHUNK_SIZE = 128; // khớp firmware: 2 gói = đúng 1 trang flash 256 byte
@@ -782,6 +782,13 @@
     $("btnSendImg").disabled = !(device && device.gatt && device.gatt.connected && packedImage);
   }
 
+  // ---------------------------------------------------------------
+  // Thu nhỏ ảnh chất lượng cao: thu từng bước, mỗi bước không quá 1/2,
+  // thay vì thu 1 bước tỷ lệ lớn (VD ảnh 3000px xuống 168px chỉ trong
+  // 1 lần vẽ). Thu nhiều bước tránh được hiện tượng răng cưa/mất chi
+  // tiết (aliasing) mà trình duyệt hay gặp khi thu ảnh tỷ lệ lớn 1 lần,
+  // đây là kỹ thuật chuẩn cho downscale chất lượng cao trên canvas.
+  // ---------------------------------------------------------------
   function drawFitted(img, ctx, mode){
     ctx.fillStyle = "#fff";
     ctx.fillRect(0,0,IMG_W,IMG_H);
@@ -789,9 +796,54 @@
     const scaleCover = Math.max(IMG_W/iw, IMG_H/ih);
     const scaleContain = Math.min(IMG_W/iw, IMG_H/ih);
     const scale = (mode==="contain") ? scaleContain : scaleCover;
-    const dw = iw*scale, dh = ih*scale;
+    const dw = Math.max(1, Math.round(iw*scale)), dh = Math.max(1, Math.round(ih*scale));
     const dx = (IMG_W-dw)/2, dy = (IMG_H-dh)/2;
-    ctx.drawImage(img, dx, dy, dw, dh);
+
+    let src = img, curW = iw, curH = ih;
+    while(curW > dw*2 || curH > dh*2){
+      const nw = Math.max(dw, Math.round(curW/2));
+      const nh = Math.max(dh, Math.round(curH/2));
+      const tmp = document.createElement("canvas");
+      tmp.width = nw; tmp.height = nh;
+      const tctx = tmp.getContext("2d");
+      tctx.imageSmoothingEnabled = true;
+      tctx.imageSmoothingQuality = "high";
+      tctx.drawImage(src, 0, 0, nw, nh);
+      src = tmp; curW = nw; curH = nh;
+    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(src, dx, dy, dw, dh);
+  }
+
+  // ---------------------------------------------------------------
+  // Làm nét (unsharp mask đơn giản, kernel 3x3): ở độ phân giải thấp,
+  // các cạnh/chi tiết dễ bị "nhòe" khi thu nhỏ - làm nét trước khi
+  // chuyển sang đen-trắng-đỏ giúp giữ được cảm giác chi tiết rõ hơn,
+  // đặc biệt là viền các vật thể trong ảnh.
+  // ---------------------------------------------------------------
+  function sharpen(ctx, amount){
+    const w = IMG_W, h = IMG_H;
+    const src = ctx.getImageData(0,0,w,h);
+    const sp = src.data;
+    const out = new Uint8ClampedArray(sp.length);
+    for(let y=0; y<h; y++){
+      for(let x=0; x<w; x++){
+        const idx = (y*w+x)*4;
+        for(let c=0; c<3; c++){
+          // Kernel sharpen chuẩn: center*5 - (trên+dưới+trái+phải)
+          const center = sp[idx+c];
+          const up    = sp[((y>0?y-1:0)*w+x)*4+c];
+          const down  = sp[((y<h-1?y+1:h-1)*w+x)*4+c];
+          const left  = sp[(y*w+(x>0?x-1:0))*4+c];
+          const right = sp[(y*w+(x<w-1?x+1:w-1))*4+c];
+          const sharpVal = center*5 - up - down - left - right;
+          out[idx+c] = center + (sharpVal-center)*amount;
+        }
+        out[idx+3] = 255;
+      }
+    }
+    ctx.putImageData(new ImageData(out, w, h), 0, 0);
   }
 
   // Bảng màu mục tiêu: trắng, đen, đỏ (đỏ trên e-paper thường tối hơn đỏ
@@ -803,6 +855,13 @@
     {r:190, g:30,  b:30,  code:2}, // đỏ
   ];
 
+  // ---------------------------------------------------------------
+  // Dithering kiểu "rắn bò" (serpentine/boustrophedon): quét xen kẽ
+  // trái->phải rồi phải->trái từng dòng, thay vì luôn trái->phải như
+  // Floyd-Steinberg gốc. Cách này giảm hẳn vệt chéo đặc trưng hay thấy
+  // ở dithering thường, ảnh trông "sạch" hơn, đặc biệt rõ ở độ phân
+  // giải thấp như thế này.
+  // ---------------------------------------------------------------
   function ditherAndPack(ctx, brightnessAdj){
     const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
     const px = imgData.data;
@@ -815,15 +874,19 @@
     }
     const classify = new Uint8Array(n); // 0=trắng, 1=đen, 2=đỏ
 
-    function diffuse(arr, x, y, e){
-      if(x+1<IMG_W)              arr[y*IMG_W+x+1]         += e*7/16;
-      if(x-1>=0 && y+1<IMG_H)    arr[(y+1)*IMG_W+x-1]      += e*3/16;
-      if(y+1<IMG_H)              arr[(y+1)*IMG_W+x]        += e*5/16;
-      if(x+1<IMG_W && y+1<IMG_H) arr[(y+1)*IMG_W+x+1]      += e*1/16;
+    function diffuse(arr, x, y, e, dir){
+      if(x+dir>=0 && x+dir<IMG_W)                 arr[y*IMG_W+x+dir]     += e*7/16;
+      if(x-dir>=0 && x-dir<IMG_W && y+1<IMG_H)     arr[(y+1)*IMG_W+x-dir] += e*3/16;
+      if(y+1<IMG_H)                                arr[(y+1)*IMG_W+x]     += e*5/16;
+      if(x+dir>=0 && x+dir<IMG_W && y+1<IMG_H)     arr[(y+1)*IMG_W+x+dir] += e*1/16;
     }
 
     for(let y=0; y<IMG_H; y++){
-      for(let x=0; x<IMG_W; x++){
+      const leftToRight = (y%2===0);
+      const dir = leftToRight ? 1 : -1;
+      const xStart = leftToRight ? 0 : IMG_W-1;
+      const xEnd = leftToRight ? IMG_W : -1;
+      for(let x=xStart; x!==xEnd; x+=dir){
         const idx = y*IMG_W+x;
         const r = errR[idx], g = errG[idx], b = errB[idx];
         // "Sắc đỏ" = kênh đỏ trội hơn hẳn xanh lá/xanh dương. Chỉ cho phép
@@ -837,9 +900,9 @@
         }
         classify[idx] = best;
         const chosen = BWR_PALETTE[best];
-        diffuse(errR, x, y, r-chosen.r);
-        diffuse(errG, x, y, g-chosen.g);
-        diffuse(errB, x, y, b-chosen.b);
+        diffuse(errR, x, y, r-chosen.r, dir);
+        diffuse(errG, x, y, g-chosen.g, dir);
+        diffuse(errB, x, y, b-chosen.b, dir);
       }
     }
 
@@ -880,6 +943,8 @@
     const ctxOrig = cOrig.getContext("2d");
     const fitmode = document.querySelector('input[name=fitmode]:checked').value;
     drawFitted(img, ctxOrig, fitmode);
+    sharpen(ctxOrig, 0.5); // làm nét vừa phải, bù lại chi tiết mất khi
+                            // thu nhỏ xuống độ phân giải thấp
 
     const brightnessAdj = parseInt($("threshRange").value, 10);
     const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj);
