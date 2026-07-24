@@ -402,7 +402,7 @@
   <!-- Upload image -->
   <section class="card">
     <h2><span class="idx">04</span> Tải ảnh cá nhân lên màn hình</h2>
-    <p class="desc">Ảnh sẽ được cắt vừa khung 168×126, chuyển thành 3 màu đen-trắng-đỏ (dithering nâng cao + làm nét) để hiển thị rõ nét nhất có thể trên màn e-paper 3 màu. Ảnh lưu tại flash của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
+    <p class="desc">Ảnh sẽ được cắt vừa khung 168×126, chuyển thành 3 màu đen-trắng-đỏ (tự động giãn tương phản + làm nét + dithering Atkinson) để hiển thị rõ nét nhất có thể trên màn e-paper 3 màu. Ảnh lưu tại flash của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
 
     <div class="drop-zone" id="dropZone">
       <div class="icon">🖼️</div>
@@ -789,6 +789,42 @@
   }
 
   // ---------------------------------------------------------------
+  // Tự động giãn tương phản (auto-contrast, theo percentile của
+  // histogram): nhiều ảnh chụp thực tế không dùng hết dải sáng-tối
+  // [0,255] (VD sáng nhất chỉ tới 210, tối nhất chỉ từ 40) - ở độ phân
+  // giải thấp, ảnh "phẳng" kiểu này dithering ra sẽ mờ nhạt, thiếu cảm
+  // giác chi tiết. Kéo giãn theo percentile (bỏ qua 1% điểm sáng/tối
+  // nhất - tránh vài điểm nhiễu kéo lệch cả phép giãn) ra hết cỡ
+  // [0,255] giúp tận dụng hết dải tương phản, ảnh "có hồn" hơn hẳn.
+  // ---------------------------------------------------------------
+  function autoContrast(ctx){
+    const w = IMG_W, h = IMG_H;
+    const imgData = ctx.getImageData(0,0,w,h);
+    const px = imgData.data;
+    const n = w*h;
+    const hist = new Uint32Array(256);
+    for(let i=0, p=0; i<n; i++, p+=4){
+      const gray = Math.round(0.299*px[p] + 0.587*px[p+1] + 0.114*px[p+2]);
+      hist[gray]++;
+    }
+    const cutoff = Math.floor(n*0.01); // bỏ qua 1% điểm sáng/tối nhất
+    let lo = 0, hi = 255, acc = 0;
+    for(lo=0; lo<255; lo++){ acc += hist[lo]; if(acc > cutoff) break; }
+    acc = 0;
+    for(hi=255; hi>0; hi--){ acc += hist[hi]; if(acc > cutoff) break; }
+    if(hi <= lo){ return; } // ảnh gần như 1 màu phẳng - không giãn được, bỏ qua
+
+    const range = hi - lo;
+    for(let p=0; p<px.length; p+=4){
+      for(let c=0; c<3; c++){
+        const v = (px[p+c]-lo) * 255/range;
+        px[p+c] = v<0 ? 0 : (v>255 ? 255 : v);
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  // ---------------------------------------------------------------
   // Làm nét (unsharp mask đơn giản, kernel 3x3): ở độ phân giải thấp,
   // các cạnh/chi tiết dễ bị "nhòe" khi thu nhỏ - làm nét trước khi
   // chuyển sang đen-trắng-đỏ giúp giữ được cảm giác chi tiết rõ hơn,
@@ -828,11 +864,18 @@
   ];
 
   // ---------------------------------------------------------------
-  // Dithering kiểu "rắn bò" (serpentine/boustrophedon): quét xen kẽ
-  // trái->phải rồi phải->trái từng dòng, thay vì luôn trái->phải như
-  // Floyd-Steinberg gốc. Cách này giảm hẳn vệt chéo đặc trưng hay thấy
-  // ở dithering thường, ảnh trông "sạch" hơn, đặc biệt rõ ở độ phân
-  // giải thấp như thế này.
+  // Dithering kiểu Atkinson (thay cho Floyd-Steinberg): chỉ khuếch tán
+  // 75% sai số ra 6 điểm lân cận (mỗi điểm 1/8), bỏ qua 25% còn lại -
+  // thay vì khuếch tán đủ 100% như Floyd-Steinberg. Đã xác nhận qua
+  // nghiên cứu: kiểu này cho ảnh tương phản cao hơn hẳn, giữ được hình
+  // dạng/cấu trúc vật thể rõ ràng, "sạch" hơn - đúng loại "cảm giác chi
+  // tiết" mắt người nhận ra tốt nhất ở độ phân giải cực thấp (đánh đổi:
+  // mất chút chi tiết ở vùng rất sáng/rất tối, nhưng không đáng kể với
+  // ảnh chân dung/vật thể thông thường). Đây chính là thuật toán Bill
+  // Atkinson dùng cho Macintosh 1984, và vẫn là lựa chọn phổ biến nhất
+  // cho thiết bị e-paper độ phân giải thấp hiện nay.
+  // Vẫn giữ quét kiểu "rắn bò" (serpentine) - quét xen kẽ trái->phải rồi
+  // phải->trái từng dòng, giảm vệt chéo đặc trưng của dithering thường.
   // ---------------------------------------------------------------
   function ditherAndPack(ctx, brightnessAdj){
     const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
@@ -847,10 +890,13 @@
     const classify = new Uint8Array(n); // 0=trắng, 1=đen, 2=đỏ
 
     function diffuse(arr, x, y, e, dir){
-      if(x+dir>=0 && x+dir<IMG_W)                 arr[y*IMG_W+x+dir]     += e*7/16;
-      if(x-dir>=0 && x-dir<IMG_W && y+1<IMG_H)     arr[(y+1)*IMG_W+x-dir] += e*3/16;
-      if(y+1<IMG_H)                                arr[(y+1)*IMG_W+x]     += e*5/16;
-      if(x+dir>=0 && x+dir<IMG_W && y+1<IMG_H)     arr[(y+1)*IMG_W+x+dir] += e*1/16;
+      const e8 = e/8;
+      if(x+dir>=0   && x+dir<IMG_W)                arr[y*IMG_W+x+dir]      += e8;
+      if(x+2*dir>=0 && x+2*dir<IMG_W)              arr[y*IMG_W+x+2*dir]    += e8;
+      if(x-dir>=0   && x-dir<IMG_W   && y+1<IMG_H) arr[(y+1)*IMG_W+x-dir]  += e8;
+      if(y+1<IMG_H)                                 arr[(y+1)*IMG_W+x]      += e8;
+      if(x+dir>=0   && x+dir<IMG_W   && y+1<IMG_H) arr[(y+1)*IMG_W+x+dir]  += e8;
+      if(y+2<IMG_H)                                 arr[(y+2)*IMG_W+x]      += e8;
     }
 
     for(let y=0; y<IMG_H; y++){
@@ -915,6 +961,7 @@
     const ctxOrig = cOrig.getContext("2d");
     const fitmode = document.querySelector('input[name=fitmode]:checked').value;
     drawFitted(img, ctxOrig, fitmode);
+    autoContrast(ctxOrig); // giãn hết cỡ dải sáng-tối thực tế của ảnh
     sharpen(ctxOrig, 0.5); // làm nét vừa phải, bù lại chi tiết mất khi
                             // thu nhỏ xuống độ phân giải thấp
 
