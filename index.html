@@ -402,7 +402,7 @@
   <!-- Upload image -->
   <section class="card">
     <h2><span class="idx">04</span> Tải ảnh cá nhân lên màn hình</h2>
-    <p class="desc">Ảnh sẽ được cắt vừa khung 168×126, chuyển thành 3 màu đen-trắng-đỏ (tự động giãn tương phản + làm nét + dithering Atkinson) để hiển thị rõ nét nhất có thể trên màn e-paper 3 màu. Ảnh lưu tại flash của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
+    <p class="desc">Ảnh sẽ được cắt vừa khung 400×300 (độ phân giải GỐC của màn hình), chuyển thành 3 màu đen-trắng-đỏ (tự động giãn tương phản + làm nét + dithering Atkinson) để hiển thị nét nhất có thể. Dữ liệu được gửi thẳng xuống bộ nhớ màn hình, không lưu trữ lại trên thiết bị - muốn xem lại cần gửi lại từ đầu.</p>
 
     <div class="drop-zone" id="dropZone">
       <div class="icon">🖼️</div>
@@ -433,11 +433,11 @@
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
         <div class="cap">Ảnh gốc (đã cắt)</div>
-        <canvas id="canvasOrig" width="168" height="126"></canvas>
+        <canvas id="canvasOrig" width="400" height="300"></canvas>
       </div>
       <div class="preview-box">
         <div class="cap">Xem trước trên e-paper</div>
-        <canvas id="canvasDither" width="168" height="126"></canvas>
+        <canvas id="canvasDither" width="400" height="300"></canvas>
       </div>
     </div>
 
@@ -445,9 +445,6 @@
       <button id="btnSend" class="wide" disabled>Gửi ảnh lên màn hình</button>
     </div>
     <progress id="sendProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
-    <div class="connect-row" style="margin-top:12px">
-      <button id="btnViewSaved" class="secondary" disabled>Xem lại ảnh đã lưu trên máy</button>
-    </div>
   </section>
 
   <!-- Calibrate -->
@@ -488,15 +485,17 @@
   const CHAR_LONGVAL    = "0000ff01-0000-1000-8000-00805f9b34fb"; // ghi lệnh (đối thời/đổi giao diện/hiệu chỉnh/ảnh)
   const CHAR_ADCVAL     = "0000ff02-0000-1000-8000-00805f9b34fb"; // đọc điện áp pin (uint16 LE, đơn vị mV)
 
-  const IMG_W = 168, IMG_H = 126; // Chế độ BWR (đen-trắng-đỏ) - kích thước
-                                    // đã được kiểm chứng hoạt động tốt trên
-                                    // cùng dòng chip DA14585.
-  const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 2646 byte/lớp
-  const IMG_DATA_LEN = IMG_PLANE_LEN*2;  // 5292 byte (đen-trắng + đỏ)
-  const IMG_CHUNK_SIZE = 128; // khớp firmware: 2 gói = đúng 1 trang flash 256 byte
+  const IMG_W = 400, IMG_H = 300; // Độ phân giải GỐC của panel - kiến trúc
+                                    // mới: dữ liệu gửi THẲNG xuống bộ nhớ
+                                    // nội bộ chip màn hình (không qua flash,
+                                    // không phóng to trên chip Bluetooth) -
+                                    // né hoàn toàn giới hạn RAM của DA14585.
+  const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 15000 byte/lớp
+  const IMG_DATA_LEN = IMG_PLANE_LEN*2;  // 30000 byte (đen-trắng + đỏ)
+  const IMG_CHUNK_SIZE = 128;
 
   let device = null, gattServer = null, longValChar = null, adcChar = null;
-  let packedImage = null; // Uint8Array 5292 byte (2 lớp BWR), sẵn sàng gửi
+  let packedImage = null; // Uint8Array 30000 byte (2 lớp BWR), sẵn sàng gửi
   let lastLoadedImg = null;
 
   // ---------------------------------------------------------------
@@ -523,7 +522,6 @@
     $("btnSync").disabled = !connected;
     $("btnMode").disabled = !connected;
     $("btnCal").disabled = !connected;
-    $("btnViewSaved").disabled = !connected;
     updateSendBtn();
     if(!connected){
       $("devName").textContent = "—";
@@ -962,7 +960,6 @@
     {rgb:{r:0,  g:0,  b:0  }, ok:rgbToOKLab(0,0,0),       code:1}, // đen
     {rgb:{r:190,g:30, b:30 }, ok:rgbToOKLab(190,30,30),   code:2}, // đỏ
   ];
-  const BW_ONLY = [BWR_PALETTE[0], BWR_PALETTE[1]];
 
   // ---------------------------------------------------------------
   // Dithering kiểu Atkinson (thay cho Floyd-Steinberg): chỉ khuếch tán
@@ -981,7 +978,7 @@
   // Sai số giờ khuếch tán TRONG KHÔNG GIAN OKLab (L,a,b) thay vì RGB thô
   // - nhất quán với việc chọn màu cũng làm trong không gian này.
   // ---------------------------------------------------------------
-  function ditherAndPack(ctx, brightnessAdj, redThreshold, noDither){
+  function ditherAndPack(ctx, brightnessAdj, chromaWeight, noDither){
     const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
     const px = imgData.data;
     const n = IMG_W*IMG_H;
@@ -1020,27 +1017,26 @@
       for(let x=xStart; x!==xEnd; x+=dir){
         const idx = y*IMG_W+x;
         const r = errR[idx], g = errG[idx], b = errB[idx];
-        // QUAY LẠI công thức lọc "có phải đỏ không" CŨ (đã cân bằng tốt
-        // qua thực tế sử dụng): kênh đỏ phải trội hơn hẳn xanh lá/xanh
-        // dương ít nhất redThreshold đơn vị (mặc định 40, thang 0-255).
-        // Ngưỡng càng cao càng ít điểm ảnh đủ điều kiện thành đỏ - dùng
-        // để giảm lượng đỏ khi cần (thanh trượt "Giảm lượng đỏ" trên
-        // giao diện web điều khiển giá trị này).
-        const redness = r - Math.max(g, b);
-        const candidates = redness > redThreshold ? BWR_PALETTE : BW_ONLY;
-        // Trong số các lựa chọn ĐÃ LỌC ở trên, chọn màu gần nhất bằng
-        // khoảng cách OKLab (chuẩn theo cảm nhận mắt người) thay vì RGB
-        // thô - vẫn giữ được cải tiến này dù đã quay lại cách lọc cũ.
+        // CÔNG THỨC THỐNG NHẤT (thay hẳn cách cũ "lọc ngưỡng rồi mới so
+        // khoảng cách riêng"): luôn so khoảng cách OKLab với CẢ 3 màu
+        // (trắng/đen/đỏ) cùng lúc, nhưng NHÂN THÊM trọng số cho phần sắc
+        // độ (a,b) so với độ sáng (L) - lý do: bất kỳ điểm ảnh nào đủ TỐI
+        // cũng sẽ "gần đen" hơn "gần đỏ" nếu tính đều 3 chiều như nhau
+        // (đen có độ sáng=0, đỏ chỉ ở khoảng giữa ~0.52) - dù điểm đó có
+        // chút sắc đỏ. Tăng trọng số sắc độ giúp CHỈ CẦN có "dấu vết" màu
+        // đỏ là đủ để thắng đen, đúng cảm nhận mắt người hơn. Đã kiểm thử
+        // qua nhiều bộ màu (xám, da người, cam, nâu, viền chữ pha loãng)
+        // để chọn ra trọng số cân bằng tốt nhất.
         const pxOk = rgbToOKLab(
           Math.max(0,Math.min(255,r)), Math.max(0,Math.min(255,g)), Math.max(0,Math.min(255,b))
         );
         let best = 0, bestDist = Infinity;
-        for(const c of candidates){
+        for(const c of BWR_PALETTE){
           const dL = pxOk.L-c.ok.L, dA = pxOk.a-c.ok.a, dB = pxOk.b-c.ok.b;
-          const d = dL*dL + dA*dA + dB*dB;
+          const d = dL*dL + chromaWeight*(dA*dA + dB*dB);
           if(d < bestDist){ bestDist = d; best = c.code; }
         }
-        const chosen = candidates.find(c => c.code===best).rgb;
+        const chosen = BWR_PALETTE.find(c => c.code===best).rgb;
         classify[idx] = best;
         diffuse(errR, x, y, r-chosen.r, dir);
         diffuse(errG, x, y, g-chosen.g, dir);
@@ -1100,18 +1096,15 @@
     const brightnessAdj = parseInt($("threshRange").value, 10);
     const redReduce = parseInt($("redReduce").value, 10); // 0-100
     const noDither = $("graphicMode").checked;
-    // Chế độ đồ hoạ/chữ: dùng ngưỡng CƠ BẢN thấp hơn (15 thay vì 40).
-    // Lý do: chữ mỏng bị thu nhỏ mạnh (VD 1200px gốc xuống 168px, ~7 lần)
-    // khiến viền chữ (vốn là điểm ảnh pha trộn đỏ đậm + nền trắng khi
-    // khử răng cưa) bị pha loãng thành màu nâu xỉn, độ đỏ đôi khi tụt
-    // xuống dưới cả ngưỡng 40 - những điểm này bị loại khỏi diện "đỏ",
-    // rồi vô tình bị xếp vào ĐEN (vì hơi tối) thay vì ĐỎ hoặc TRẮNG như
-    // mắt người mong đợi - đây chính là lỗi "chữ đỏ lẫn đen" bạn thấy.
-    // Ngưỡng thấp hơn giúp các điểm viền pha loãng này vẫn được tính là
-    // đỏ, khớp đúng cảm nhận thị giác cho nội dung dạng chữ/đồ hoạ.
-    const baseThreshold = noDither ? 15 : 40;
-    const redThreshold = baseThreshold + redReduce;
-    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj, redThreshold, noDither);
+    // CÔNG THỨC THỐNG NHẤT (thay hẳn cách "lọc ngưỡng rồi so riêng" cũ -
+    // cách cũ luôn để lọt một số điểm viền chữ pha loãng bị xếp nhầm
+    // thành đen dù đáng lẽ phải là đỏ/trắng, đã kiểm chứng bằng dữ liệu
+    // ảnh thật). Trọng số sắc độ (chromaWeight) mặc định 6 - đã kiểm thử
+    // qua nhiều bộ màu (xám, da người, cam, nâu, viền chữ...) cho kết
+    // quả cân bằng tốt nhất. Thanh "Giảm lượng đỏ" giờ giảm dần trọng số
+    // này (giảm sắc độ càng nhiều, đỏ càng khó thắng đen/trắng).
+    const chromaWeight = 6 * (1 - redReduce/120); // 0->6 (mặc định), 100->1.5
+    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj, chromaWeight, noDither);
     packedImage = packed;
 
     const ctxDither = cDither.getContext("2d");
@@ -1223,8 +1216,7 @@
       startBuf[7] = (IMG_DATA_LEN>>16) & 0xff;
       startBuf[8] = (IMG_DATA_LEN>>24) & 0xff;
       await writeWithRetry(startBuf, 3);
-      log("Đã gửi lệnh bắt đầu (0x96) - thiết bị đang xoá vùng nhớ…");
-      await sleep(800); // chờ xoá xong các sector flash cần dùng
+      log("Đã gửi lệnh bắt đầu (0x96) - thiết bị đang mở phiên ghi màn hình…");
 
       const totalChunks = Math.ceil(IMG_DATA_LEN/IMG_CHUNK_SIZE);
       for(let i=0; i<totalChunks; i++){
@@ -1238,31 +1230,20 @@
         buf.set(chunkData, 3);
         await writeWithRetry(buf, 3); // thử lại tối đa 3 lần nếu gặp lỗi GATT tạm thời
         await sleep(15); // nghỉ nhỏ giữa các gói - gửi liên tục quá nhanh dễ gây "GATT operation failed"
-        $("sendProgress").value = Math.round((i+1)/totalChunks*90);
-        if(i % 10 === 0){
+        $("sendProgress").value = Math.round((i+1)/totalChunks*100);
+        if(i % 20 === 0){
           log(`Đã gửi gói ${i+1}/${totalChunks}…`);
         }
       }
 
-      const crc = crc32(packedImage);
-      const endBuf = new Uint8Array(5);
-      endBuf[0] = 0x98;
-      endBuf[1] = crc & 0xff;
-      endBuf[2] = (crc>>8) & 0xff;
-      endBuf[3] = (crc>>16) & 0xff;
-      endBuf[4] = (crc>>24) & 0xff;
-      await writeWithRetry(endBuf, 3);
-      $("sendProgress").value = 100;
-      log(`Đã gửi xong toàn bộ ${totalChunks} gói, CRC32=0x${crc.toString(16)}. Thiết bị đang hiển thị ảnh…`, "ok");
+      // KHÔNG còn lệnh kết thúc riêng (0x98) hay CRC32 nữa - thiết bị tự
+      // động kích hoạt làm mới màn hình ngay khi nhận đủ byte cuối cùng.
+      log(`Đã gửi xong toàn bộ ${totalChunks} gói. Thiết bị đang hiển thị ảnh…`, "ok");
     }catch(err){
       log("Lỗi khi gửi ảnh: " + err.message, "err");
     }finally{
       updateSendBtn();
     }
-  }
-
-  async function viewSaved(){
-    await writeCommand([0x99], "Xem lại ảnh đã lưu");
   }
 
   // ---------------------------------------------------------------
@@ -1279,7 +1260,6 @@
   $("btnMode").addEventListener("click", switchMode);
   $("btnCal").addEventListener("click", calibrate);
   $("btnSend").addEventListener("click", sendImage);
-  $("btnViewSaved").addEventListener("click", viewSaved);
 
   setConnectedUI(false);
 })();
