@@ -402,7 +402,7 @@
   <!-- Upload image -->
   <section class="card">
     <h2><span class="idx">04</span> Tải ảnh cá nhân lên màn hình</h2>
-    <p class="desc">Ảnh sẽ được cắt vừa khung 352×264, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
+    <p class="desc">Ảnh sẽ được cắt vừa khung 128×96, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
 
     <div class="drop-zone" id="dropZone">
       <div class="icon">🖼️</div>
@@ -421,11 +421,11 @@
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
         <div class="cap">Ảnh gốc (đã cắt)</div>
-        <canvas id="canvasOrig" width="352" height="264"></canvas>
+        <canvas id="canvasOrig" width="128" height="96"></canvas>
       </div>
       <div class="preview-box">
         <div class="cap">Xem trước trên e-paper</div>
-        <canvas id="canvasDither" width="352" height="264"></canvas>
+        <canvas id="canvasDither" width="128" height="96"></canvas>
       </div>
     </div>
 
@@ -770,7 +770,7 @@
   // chỉ dùng chung 1 vùng flash trên thiết bị (ai gửi/vẽ sau sẽ ghi
   // đè người trước).
   // ---------------------------------------------------------------
-  const IMG_W = 352, IMG_H = 264;
+  const IMG_W = 128, IMG_H = 96;
   const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 2646 byte/lớp
   const IMG_DATA_LEN = IMG_PLANE_LEN*2;  // 5292 byte (đen-trắng + đỏ)
   const IMG_CHUNK_SIZE = 128; // khớp firmware: 2 gói = đúng 1 trang flash 256 byte
