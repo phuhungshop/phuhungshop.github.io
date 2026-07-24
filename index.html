@@ -402,7 +402,7 @@
   <!-- Upload image -->
   <section class="card">
     <h2><span class="idx">04</span> Tải ảnh cá nhân lên màn hình</h2>
-    <p class="desc">Ảnh sẽ được cắt vừa khung 168×126, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash <code>0x39000</code> của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
+    <p class="desc">Ảnh sẽ được cắt vừa khung 320×240, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash <code>0x39000</code> của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
 
     <div class="drop-zone" id="dropZone">
       <div class="icon">🖼️</div>
@@ -421,11 +421,11 @@
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
         <div class="cap">Ảnh gốc (đã cắt)</div>
-        <canvas id="canvasOrig" width="168" height="126"></canvas>
+        <canvas id="canvasOrig" width="320" height="240"></canvas>
       </div>
       <div class="preview-box">
         <div class="cap">Xem trước trên e-paper</div>
-        <canvas id="canvasDither" width="168" height="126"></canvas>
+        <canvas id="canvasDither" width="320" height="240"></canvas>
       </div>
     </div>
 
@@ -480,7 +480,7 @@
   // 固件那边这次改架构之后RAM不够用了，除了字体缩小之外，图片分辨率
   // 也跟着降了一档才勉强塞得下，网页这边必须跟着同步改，不然固件的
   // img_transfer_start()尺寸校验会直接拒绝整个传输。
-  const IMG_W = 168, IMG_H = 126;
+  const IMG_W = 320, IMG_H = 240;
   const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 3456 byte/lớp
   const IMG_DATA_LEN = IMG_PLANE_LEN*2;  // 6912 byte (đen-trắng + đỏ)
   const IMG_CHUNK_SIZE = 128; // khớp firmware: 2 gói = đúng 1 trang flash 256 byte
