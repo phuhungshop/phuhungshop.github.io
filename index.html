@@ -420,6 +420,9 @@
     <div class="opt-row">
       <label><input type="range" id="agingLevel" min="0" max="100" value="0" style="width:140px"> Mức lão hóa màn hình (bù tương phản)</label>
     </div>
+    <div class="opt-row">
+      <label><input type="range" id="blackPoint" min="0" max="120" value="0" style="width:140px"> Tăng điểm đen (giữ nguyên vùng sáng)</label>
+    </div>
 
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
@@ -828,6 +831,31 @@
   }
 
   // ---------------------------------------------------------------
+  // Điều chỉnh "điểm đen" (black point, kiểu công cụ Levels chuẩn):
+  // KHÁC với thanh "độ sáng/tối" (dịch chuyển ĐỀU cả ảnh) - cái này chỉ
+  // đẩy các điểm ảnh ĐÃ TỐI SẴN (dưới ngưỡng) về đen hẳn, rồi kéo giãn
+  // phần còn lại (từ ngưỡng->255) lấp đầy [0,255] - vùng sáng gần như
+  // không bị ảnh hưởng. Dùng khi muốn TĂNG DIỆN TÍCH ĐEN trong ảnh (ví
+  // dụ bóng tối/tóc/quần áo tối màu) mà không làm xám thêm phần còn lại
+  // của ảnh như khi chỉnh độ sáng/tối thông thường.
+  // ---------------------------------------------------------------
+  function applyBlackPoint(ctx, threshold){
+    if(threshold <= 0) return;
+    const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
+    const px = imgData.data;
+    const lut = new Uint8ClampedArray(256);
+    for(let i=0; i<256; i++){
+      lut[i] = i<=threshold ? 0 : Math.round((i-threshold)*255/(255-threshold));
+    }
+    for(let p=0; p<px.length; p+=4){
+      px[p]   = lut[px[p]];
+      px[p+1] = lut[px[p+1]];
+      px[p+2] = lut[px[p+2]];
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  // ---------------------------------------------------------------
   // Hiệu chỉnh gamma - dùng để BÙ TRỪ MÀN HÌNH LÃO HÓA: hạt mực đen/
   // trắng bên trong không còn "chuyển trạng thái hoàn toàn" như lúc
   // mới (đen không còn đen thật, trắng không còn trắng thật - tương
@@ -1048,6 +1076,9 @@
     const gamma = 1.0 + (agingLevel/100)*1.5; // 0->1.0 (không đổi), 100->2.5 (đẩy mạnh)
     applyGamma(ctxOrig, gamma); // bù tương phản mất do màn hình lão hóa
 
+    const blackPointVal = parseInt($("blackPoint").value, 10);
+    applyBlackPoint(ctxOrig, blackPointVal); // tăng diện tích đen, giữ nguyên vùng sáng
+
     sharpen(ctxOrig, 0.5); // làm nét vừa phải, bù lại chi tiết mất khi
                             // thu nhỏ xuống độ phân giải thấp
 
@@ -1096,6 +1127,7 @@
   });
   $("threshRange").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
   $("agingLevel").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
+  $("blackPoint").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
 
   // ---------------------------------------------------------------
   // CRC32 chuẩn (IEEE 802.3 / zlib) - khớp đúng hàm crc32() trong
