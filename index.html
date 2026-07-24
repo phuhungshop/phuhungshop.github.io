@@ -399,42 +399,28 @@
     </div>
   </section>
 
-  <!-- Upload image -->
+  <!-- Draw doodle -->
   <section class="card">
-    <h2><span class="idx">04</span> Tải ảnh cá nhân lên màn hình</h2>
-    <p class="desc">Ảnh sẽ được cắt vừa khung 320×240, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash <code>0x39000</code> của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
-
-    <div class="drop-zone" id="dropZone">
-      <div class="icon">🖼️</div>
-      <p><strong>Bấm để chọn ảnh</strong> hoặc kéo-thả vào đây</p>
-      <input type="file" id="fileInput" accept="image/*">
-    </div>
+    <h2><span class="idx">04</span> Vẽ tay lên màn hình</h2>
+    <p class="desc">Vẽ tự do bằng chuột/ngón tay — nét vẽ được gửi dưới dạng đường nét (không phải ảnh chụp), nên nhẹ hơn nhiều so với ảnh, không bị giới hạn độ phân giải nhiều như ảnh. Vẽ xong bấm "Gửi lên màn hình". Có thể xem lại nét vẽ trước đó bất cứ lúc nào.</p>
 
     <div class="opt-row">
-      <label><input type="radio" name="fitmode" value="cover" checked> Lấp đầy khung (cắt bớt)</label>
-      <label><input type="radio" name="fitmode" value="contain"> Vừa khung (viền trắng)</label>
-    </div>
-    <div class="opt-row">
-      <label><input type="range" id="threshRange" min="-60" max="60" value="0" style="width:140px"> Điều chỉnh độ sáng/tối</label>
+      <label><input type="radio" name="penColor" value="black" checked> Bút đen</label>
+      <label><input type="radio" name="penColor" value="red"> Bút đỏ</label>
     </div>
 
-    <div class="preview-grid" id="previewGrid" style="display:none">
-      <div class="preview-box">
-        <div class="cap">Ảnh gốc (đã cắt)</div>
-        <canvas id="canvasOrig" width="320" height="240"></canvas>
-      </div>
-      <div class="preview-box">
-        <div class="cap">Xem trước trên e-paper</div>
-        <canvas id="canvasDither" width="320" height="240"></canvas>
-      </div>
+    <canvas id="drawCanvas" width="400" height="300" style="width:100%; height:auto; aspect-ratio:400/300; background:#fff; border:1px solid var(--rule); border-radius:4px; touch-action:none; cursor:crosshair;"></canvas>
+
+    <div class="connect-row" style="margin-top:12px">
+      <button id="btnClearCanvas" class="secondary">Xoá bảng vẽ</button>
     </div>
 
     <div class="connect-row" style="margin-top:16px">
-      <button id="btnSend" class="wide" disabled>Gửi ảnh lên màn hình</button>
+      <button id="btnSend" class="wide" disabled>Gửi lên màn hình</button>
     </div>
     <progress id="sendProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
     <div class="connect-row" style="margin-top:12px">
-      <button id="btnViewSaved" class="secondary" disabled>Xem lại ảnh đã lưu trên máy</button>
+      <button id="btnViewSaved" class="secondary" disabled>Xem lại nét vẽ đã lưu trên máy</button>
     </div>
   </section>
 
@@ -473,21 +459,10 @@
   // Hằng số giao thức BLE (khớp đúng user_custs1_def.c của firmware)
   // ---------------------------------------------------------------
   const SVC_UUID         = "0000ff00-0000-1000-8000-00805f9b34fb"; // dịch vụ chính
-  const CHAR_LONGVAL    = "0000ff01-0000-1000-8000-00805f9b34fb"; // ghi lệnh (đối thời/đổi giao diện/hiệu chỉnh/ảnh)
+  const CHAR_LONGVAL    = "0000ff01-0000-1000-8000-00805f9b34fb"; // ghi lệnh (đối thời/đổi giao diện/hiệu chỉnh/vẽ)
   const CHAR_ADCVAL     = "0000ff02-0000-1000-8000-00805f9b34fb"; // đọc điện áp pin (uint16 LE, đơn vị mV)
 
-  // 分辨率改成192x144（跟firmware改完之后的IMG_W/IMG_H保持一致）——
-  // 固件那边这次改架构之后RAM不够用了，除了字体缩小之外，图片分辨率
-  // 也跟着降了一档才勉强塞得下，网页这边必须跟着同步改，不然固件的
-  // img_transfer_start()尺寸校验会直接拒绝整个传输。
-  const IMG_W = 320, IMG_H = 240;
-  const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 3456 byte/lớp
-  const IMG_DATA_LEN = IMG_PLANE_LEN*2;  // 6912 byte (đen-trắng + đỏ)
-  const IMG_CHUNK_SIZE = 128; // khớp firmware: 2 gói = đúng 1 trang flash 256 byte
-
   let device = null, gattServer = null, longValChar = null, adcChar = null;
-  let packedImage = null; // Uint8Array 6912 byte (2 lớp BWR), sẵn sàng gửi
-  let lastLoadedImg = null;
 
   // ---------------------------------------------------------------
   // Tiện ích giao diện
@@ -519,10 +494,6 @@
       $("devName").textContent = "—";
       $("devVolt").textContent = "— V";
     }
-  }
-
-  function updateSendBtn(){
-    $("btnSend").disabled = !(device && device.gatt && device.gatt.connected && packedImage);
   }
 
   // Đồng hồ hệ thống + xem trước - chạy độc lập, không cần kết nối
@@ -757,188 +728,131 @@
   }
 
   // ---------------------------------------------------------------
-  // Xử lý ảnh: cắt vừa khung, chuyển xám, Floyd-Steinberg dithering,
-  // đóng gói 1-bit MSB-trước (khớp định dạng fb_bw của firmware:
-  // IMG_W/8 byte/dòng x IMG_H dòng, bit=0 là ĐEN, bit=1 là TRẮNG).
+  // Bảng vẽ tay: vẽ tự do bằng chuột/ngón tay, gửi lên máy dưới dạng
+  // các nét vẽ (đường nối các điểm), không phải ảnh bitmap — nhẹ hơn
+  // nhiều so với gửi ảnh chụp, không bị giới hạn độ phân giải bởi RAM
+  // hạn hẹp của thiết bị như cách cũ.
+  //
+  // Giao thức (khớp đúng user_custs1_impl.c bên firmware):
+  // - 0x9A (1 byte): bắt đầu vẽ mới — xoá bảng
+  // - 0x9B (3~131 byte): 1 đoạn của 1 nét vẽ — cmd, flags(bit0=màu:
+  //   0 đen/1 đỏ; bit1=có phải điểm đầu của 1 nét vẽ mới không), số
+  //   điểm N (tối đa 31 điểm/gói để không vượt quá 1 gói BLE), rồi N
+  //   điểm mỗi điểm 4 byte (x_lo,x_hi,y_lo,y_hi, little-endian)
+  // - 0x9C (1 byte): kết thúc, hiển thị lên màn hình
+  // - 0x9D (1 byte): hiển thị lại nét vẽ đã lưu trên máy, không cần
+  //   gửi lại
   // ---------------------------------------------------------------
-  function drawFitted(img, ctx, mode){
+
+  const CANVAS_W = 400, CANVAS_H = 300; // khớp đúng kích thước panel
+  const MAX_POINTS_PER_MSG = 31; // 3 + 31*4 = 127 byte, vừa 1 gói BLE
+  const MIN_POINT_DIST = 3; // px — điểm mới cách điểm trước ít nhất
+                              // ngần này mới ghi nhận, tránh dữ liệu
+                              // dày đặc vô ích khi rê chuột chậm
+
+  const canvas = $("drawCanvas");
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  let strokes = []; // mảng các nét vẽ, mỗi nét là {color, points:[{x,y},...]}
+  let curStroke = null;
+  let drawing = false;
+
+  function canvasPoint(e){
+    const rect = canvas.getBoundingClientRect();
+    const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+    // canvas hiển thị có thể bị CSS scale (width:100%), quy đổi lại
+    // đúng toạ độ gốc 400x300
+    const x = Math.round(cx * (CANVAS_W / rect.width));
+    const y = Math.round(cy * (CANVAS_H / rect.height));
+    return { x: Math.max(0, Math.min(CANVAS_W - 1, x)),
+             y: Math.max(0, Math.min(CANVAS_H - 1, y)) };
+  }
+
+  function currentPenColor(){
+    return document.querySelector('input[name=penColor]:checked').value;
+  }
+
+  function redrawAll(){
     ctx.fillStyle = "#fff";
-    ctx.fillRect(0,0,IMG_W,IMG_H);
-    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-    const scaleCover = Math.max(IMG_W/iw, IMG_H/ih);
-    const scaleContain = Math.min(IMG_W/iw, IMG_H/ih);
-    const scale = (mode==="contain") ? scaleContain : scaleCover;
-    const dw = iw*scale, dh = ih*scale;
-    const dx = (IMG_W-dw)/2, dy = (IMG_H-dh)/2;
-    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    for(const s of strokes){
+      drawStrokeOnCanvas(s);
+    }
   }
 
-  // Bảng màu mục tiêu: trắng, đen, đỏ (đỏ trên e-paper thường tối hơn đỏ
-  // thuần trên màn hình máy tính, dùng giá trị gần thực tế hơn để phân
-  // loại chính xác hơn).
-  const BWR_PALETTE = [
-    {r:255, g:255, b:255, code:0}, // trắng
-    {r:0,   g:0,   b:0,   code:1}, // đen
-    {r:190, g:30,  b:30,  code:2}, // đỏ
-  ];
-
-  function ditherAndPack(ctx, brightnessAdj){
-    const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
-    const px = imgData.data;
-    const n = IMG_W*IMG_H;
-    const errR = new Float32Array(n), errG = new Float32Array(n), errB = new Float32Array(n);
-    for(let i=0, p=0; i<n; i++, p+=4){
-      errR[i] = px[p]   + brightnessAdj;
-      errG[i] = px[p+1] + brightnessAdj;
-      errB[i] = px[p+2] + brightnessAdj;
+  function drawStrokeOnCanvas(s){
+    if(s.points.length===0) return;
+    ctx.strokeStyle = s.color==="red" ? "#c81e1e" : "#000";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(s.points[0].x, s.points[0].y);
+    for(let i=1;i<s.points.length;i++){
+      ctx.lineTo(s.points[i].x, s.points[i].y);
     }
-    const classify = new Uint8Array(n); // 0=trắng, 1=đen, 2=đỏ
-
-    function diffuse(arr, x, y, e){
-      if(x+1<IMG_W)              arr[y*IMG_W+x+1]         += e*7/16;
-      if(x-1>=0 && y+1<IMG_H)    arr[(y+1)*IMG_W+x-1]      += e*3/16;
-      if(y+1<IMG_H)              arr[(y+1)*IMG_W+x]        += e*5/16;
-      if(x+1<IMG_W && y+1<IMG_H) arr[(y+1)*IMG_W+x+1]      += e*1/16;
+    if(s.points.length===1){
+      // 1 điểm duy nhất (chấm nhẹ) vẫn phải vẽ được gì đó nhìn thấy
+      ctx.lineTo(s.points[0].x+0.1, s.points[0].y+0.1);
     }
-
-    for(let y=0; y<IMG_H; y++){
-      for(let x=0; x<IMG_W; x++){
-        const idx = y*IMG_W+x;
-        const r = errR[idx], g = errG[idx], b = errB[idx];
-        // "Sắc đỏ" = kênh đỏ trội hơn hẳn xanh lá/xanh dương. Chỉ cho phép
-        // chọn đỏ làm ứng viên khi có sắc đỏ rõ rệt - nếu không, màu xám
-        // trung tính (vốn nằm giữa đen-trắng) dễ bị nhận nhầm thành đỏ vì
-        // khoảng cách RGB thuần đôi khi gần đỏ hơn cả đen lẫn trắng.
-        const redness = r - Math.max(g, b);
-        const candidates = redness > 40 ? BWR_PALETTE : [BWR_PALETTE[0], BWR_PALETTE[1]];
-        let best = 0, bestDist = Infinity;
-        for(const c of candidates){
-          const d = (r-c.r)*(r-c.r) + (g-c.g)*(g-c.g) + (b-c.b)*(b-c.b);
-          if(d < bestDist){ bestDist = d; best = c.code; }
-        }
-        classify[idx] = best;
-        const chosen = BWR_PALETTE[best];
-        diffuse(errR, x, y, r-chosen.r);
-        diffuse(errG, x, y, g-chosen.g);
-        diffuse(errB, x, y, b-chosen.b);
-      }
-    }
-
-    // Đóng gói thành 2 lớp: đen-trắng (bit=1 trừ khi là đen) và đỏ (bit=1
-    // khi là đỏ) - khớp đúng định dạng firmware mong đợi (lớp BW rồi tới
-    // lớp đỏ, mỗi lớp IMG_PLANE_LEN byte).
-    const bwPlane = new Uint8Array(IMG_PLANE_LEN);
-    const redPlane = new Uint8Array(IMG_PLANE_LEN);
-    for(let y=0; y<IMG_H; y++){
-      for(let xByte=0; xByte<IMG_W/8; xByte++){
-        let bwByte = 0, redByte = 0;
-        for(let b=0; b<8; b++){
-          const x = xByte*8+b;
-          const c = classify[y*IMG_W+x];
-          const bwBit = (c===1) ? 0 : 1;
-          const redBit = (c===2) ? 1 : 0;
-          bwByte  |= (bwBit<<(7-b));
-          redByte |= (redBit<<(7-b));
-        }
-        bwPlane[y*(IMG_W/8)+xByte]  = bwByte;
-        redPlane[y*(IMG_W/8)+xByte] = redByte;
-      }
-    }
-    const packed = new Uint8Array(IMG_DATA_LEN);
-    packed.set(bwPlane, 0);
-    packed.set(redPlane, IMG_PLANE_LEN);
-    return { packed, classify };
+    ctx.stroke();
   }
 
-  function renderPreviewFromBW(ctx, classify){
-    const imgData = ctx.createImageData(IMG_W, IMG_H);
-    for(let i=0;i<classify.length;i++){
-      const c = BWR_PALETTE[classify[i]];
-      imgData.data[i*4]=c.r; imgData.data[i*4+1]=c.g; imgData.data[i*4+2]=c.b; imgData.data[i*4+3]=255;
-    }
-    ctx.putImageData(imgData,0,0);
-  }
-
-  function processImage(img){
-    const cOrig = $("canvasOrig"), cDither = $("canvasDither");
-    const ctxOrig = cOrig.getContext("2d");
-    const fitmode = document.querySelector('input[name=fitmode]:checked').value;
-    drawFitted(img, ctxOrig, fitmode);
-
-    const brightnessAdj = parseInt($("threshRange").value, 10);
-    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj);
-    packedImage = packed;
-
-    const ctxDither = cDither.getContext("2d");
-    renderPreviewFromBW(ctxDither, classify);
-
-    $("previewGrid").style.display = "grid";
+  function startStroke(pt){
+    curStroke = { color: currentPenColor(), points: [pt] };
+    strokes.push(curStroke);
+    drawing = true;
     updateSendBtn();
   }
 
-  function handleFile(file){
-    if(!file || !file.type.startsWith("image/")){
-      log("Vui lòng chọn 1 file ảnh.", "err");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        lastLoadedImg = img;
-        processImage(img);
-        log("Đã xử lý ảnh, xem trước bên dưới.", "ok");
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+  function extendStroke(pt){
+    if(!curStroke) return;
+    const last = curStroke.points[curStroke.points.length-1];
+    const dx = pt.x-last.x, dy = pt.y-last.y;
+    if(dx*dx+dy*dy < MIN_POINT_DIST*MIN_POINT_DIST) return;
+    curStroke.points.push(pt);
+    // vẽ ngay đoạn mới thêm, không cần vẽ lại toàn bộ cho mượt
+    ctx.strokeStyle = curStroke.color==="red" ? "#c81e1e" : "#000";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    ctx.lineTo(pt.x, pt.y);
+    ctx.stroke();
   }
 
-  $("fileInput").addEventListener("change", (e) => {
-    if(e.target.files[0]) handleFile(e.target.files[0]);
-  });
-  $("dropZone").addEventListener("click", () => $("fileInput").click());
-  $("dropZone").addEventListener("dragover", (e) => { e.preventDefault(); $("dropZone").classList.add("dragover"); });
-  $("dropZone").addEventListener("dragleave", () => $("dropZone").classList.remove("dragover"));
-  $("dropZone").addEventListener("drop", (e) => {
-    e.preventDefault();
-    $("dropZone").classList.remove("dragover");
-    if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-  });
-  document.querySelectorAll('input[name=fitmode]').forEach((el) => {
-    el.addEventListener("change", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
-  });
-  $("threshRange").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
-
-  // ---------------------------------------------------------------
-  // CRC32 chuẩn (IEEE 802.3 / zlib) - khớp đúng hàm crc32() trong
-  // firmware (img_crc32_update() trong user_custs1_impl.c).
-  // ---------------------------------------------------------------
-  let crcTable = null;
-  function makeCrcTable(){
-    const table = new Uint32Array(256);
-    for(let n=0; n<256; n++){
-      let c = n;
-      for(let k=0; k<8; k++){
-        c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-      }
-      table[n] = c;
-    }
-    return table;
+  function endStroke(){
+    drawing = false;
+    curStroke = null;
   }
-  function crc32(buf){
-    if(!crcTable) crcTable = makeCrcTable();
-    let crc = 0 ^ 0xFFFFFFFF;
-    for(let i=0; i<buf.length; i++){
-      crc = crcTable[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
-    }
-    return (crc ^ 0xFFFFFFFF) >>> 0;
+
+  canvas.addEventListener("pointerdown", (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    startStroke(canvasPoint(e));
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if(!drawing) return;
+    extendStroke(canvasPoint(e));
+  });
+  canvas.addEventListener("pointerup", endStroke);
+  canvas.addEventListener("pointercancel", endStroke);
+
+  $("btnClearCanvas").addEventListener("click", () => {
+    strokes = [];
+    curStroke = null;
+    redrawAll();
+    updateSendBtn();
+  });
+
+  function updateSendBtn(){
+    $("btnSend").disabled = !(device && device.gatt && device.gatt.connected && strokes.length>0);
   }
 
   // ---------------------------------------------------------------
-  // Gửi ảnh: 0x96 (bắt đầu) -> nhiều gói 0x97 (128 byte/gói) -> 0x98
-  // (kết thúc + CRC32). Xem chi tiết giao thức trong user_custs1_impl.c
-  // của firmware (img_transfer_start/chunk/end).
+  // Gửi bảng vẽ: 0x9A (bắt đầu) -> nhiều gói 0x9B (mỗi nét vẽ chia
+  // thành các đoạn tối đa 31 điểm) -> 0x9C (kết thúc + hiển thị).
   // ---------------------------------------------------------------
   function sleep(ms){ return new Promise((r) => setTimeout(r, ms)); }
 
@@ -950,14 +864,14 @@
         return;
       }catch(err){
         lastErr = err;
-        await sleep(150); // chờ 1 chút trước khi thử lại, cho kết nối ổn định lại
+        await sleep(150);
       }
     }
     throw lastErr;
   }
 
-  async function sendImage(){
-    if(!packedImage){ log("Chưa có ảnh để gửi.", "err"); return; }
+  async function sendDrawing(){
+    if(strokes.length===0){ log("Chưa vẽ gì để gửi.", "err"); return; }
     if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
 
     $("btnSend").disabled = true;
@@ -965,56 +879,53 @@
     $("sendProgress").value = 0;
 
     try{
-      const startBuf = new Uint8Array(9);
-      startBuf[0] = 0x96;
-      startBuf[1] = IMG_W & 0xff; startBuf[2] = (IMG_W>>8) & 0xff;
-      startBuf[3] = IMG_H & 0xff; startBuf[4] = (IMG_H>>8) & 0xff;
-      startBuf[5] = IMG_DATA_LEN & 0xff;
-      startBuf[6] = (IMG_DATA_LEN>>8) & 0xff;
-      startBuf[7] = (IMG_DATA_LEN>>16) & 0xff;
-      startBuf[8] = (IMG_DATA_LEN>>24) & 0xff;
-      await writeWithRetry(startBuf, 3);
-      log("Đã gửi lệnh bắt đầu (0x96) - thiết bị đang xoá vùng nhớ…");
-      await sleep(800); // chờ xoá xong các sector flash cần dùng
+      await writeWithRetry([0x9a], 3);
+      log("Đã gửi lệnh bắt đầu (0x9a) - thiết bị đang xoá vùng nhớ…");
+      await sleep(500);
 
-      const totalChunks = Math.ceil(IMG_DATA_LEN/IMG_CHUNK_SIZE);
-      for(let i=0; i<totalChunks; i++){
-        const off = i*IMG_CHUNK_SIZE;
-        const end = Math.min(off+IMG_CHUNK_SIZE, IMG_DATA_LEN);
-        const chunkData = packedImage.slice(off, end);
-        const buf = new Uint8Array(3+chunkData.length);
-        buf[0] = 0x97;
-        buf[1] = i & 0xff;
-        buf[2] = (i>>8) & 0xff;
-        buf.set(chunkData, 3);
-        await writeWithRetry(buf, 3); // thử lại tối đa 3 lần nếu gặp lỗi GATT tạm thời
-        await sleep(15); // nghỉ nhỏ giữa các gói - gửi liên tục quá nhanh dễ gây "GATT operation failed"
-        $("sendProgress").value = Math.round((i+1)/totalChunks*90);
-        if(i % 10 === 0){
-          log(`Đã gửi gói ${i+1}/${totalChunks}…`);
+      let totalMsgs = 0;
+      for(const s of strokes){
+        totalMsgs += Math.max(1, Math.ceil(s.points.length/MAX_POINTS_PER_MSG));
+      }
+      let sentMsgs = 0;
+
+      for(const s of strokes){
+        const colorBit = s.color==="red" ? 1 : 0;
+        for(let off=0; off<s.points.length; off+=MAX_POINTS_PER_MSG){
+          const chunk = s.points.slice(off, off+MAX_POINTS_PER_MSG);
+          const isFirst = (off===0);
+          const flags = colorBit | (isFirst ? 0x02 : 0x00);
+          const buf = new Uint8Array(3 + chunk.length*4);
+          buf[0] = 0x9b;
+          buf[1] = flags;
+          buf[2] = chunk.length;
+          chunk.forEach((p, i) => {
+            buf[3+i*4]   = p.x & 0xff;
+            buf[3+i*4+1] = (p.x>>8) & 0xff;
+            buf[3+i*4+2] = p.y & 0xff;
+            buf[3+i*4+3] = (p.y>>8) & 0xff;
+          });
+          await writeWithRetry(buf, 3);
+          await sleep(15);
+          sentMsgs++;
+          $("sendProgress").value = Math.round(sentMsgs/totalMsgs*90);
         }
       }
 
-      const crc = crc32(packedImage);
-      const endBuf = new Uint8Array(5);
-      endBuf[0] = 0x98;
-      endBuf[1] = crc & 0xff;
-      endBuf[2] = (crc>>8) & 0xff;
-      endBuf[3] = (crc>>16) & 0xff;
-      endBuf[4] = (crc>>24) & 0xff;
-      await writeWithRetry(endBuf, 3);
+      await writeWithRetry([0x9c], 3);
       $("sendProgress").value = 100;
-      log(`Đã gửi xong toàn bộ ${totalChunks} gói, CRC32=0x${crc.toString(16)}. Thiết bị đang hiển thị ảnh…`, "ok");
+      log(`Đã gửi xong ${strokes.length} nét vẽ. Thiết bị đang hiển thị…`, "ok");
     }catch(err){
-      log("Lỗi khi gửi ảnh: " + err.message, "err");
+      log("Lỗi khi gửi: " + err.message, "err");
     }finally{
       updateSendBtn();
     }
   }
 
   async function viewSaved(){
-    await writeCommand([0x99], "Xem lại ảnh đã lưu");
+    await writeCommand([0x9d], "Xem lại nét vẽ đã lưu");
   }
+
 
   // ---------------------------------------------------------------
   // Gắn sự kiện
@@ -1029,7 +940,7 @@
   $("btnSync").addEventListener("click", syncTime);
   $("btnMode").addEventListener("click", switchMode);
   $("btnCal").addEventListener("click", calibrate);
-  $("btnSend").addEventListener("click", sendImage);
+  $("btnSend").addEventListener("click", sendDrawing);
   $("btnViewSaved").addEventListener("click", viewSaved);
 
   setConnectedUI(false);
