@@ -423,6 +423,9 @@
     <div class="opt-row">
       <label><input type="range" id="blackPoint" min="0" max="120" value="0" style="width:140px"> Tăng điểm đen (giữ nguyên vùng sáng)</label>
     </div>
+    <div class="opt-row">
+      <label><input type="range" id="redReduce" min="0" max="100" value="0" style="width:140px"> Giảm lượng đỏ</label>
+    </div>
 
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
@@ -975,7 +978,7 @@
   // Sai số giờ khuếch tán TRONG KHÔNG GIAN OKLab (L,a,b) thay vì RGB thô
   // - nhất quán với việc chọn màu cũng làm trong không gian này.
   // ---------------------------------------------------------------
-  function ditherAndPack(ctx, brightnessAdj){
+  function ditherAndPack(ctx, brightnessAdj, redThreshold){
     const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
     const px = imgData.data;
     const n = IMG_W*IMG_H;
@@ -1007,12 +1010,12 @@
         const r = errR[idx], g = errG[idx], b = errB[idx];
         // QUAY LẠI công thức lọc "có phải đỏ không" CŨ (đã cân bằng tốt
         // qua thực tế sử dụng): kênh đỏ phải trội hơn hẳn xanh lá/xanh
-        // dương ít nhất 40 đơn vị (thang 0-255). Công thức OKLab chroma
-        // thử trước đó QUÁ NHẠY, bắt cả da người/tông ấm thành đỏ dư
-        // thừa - công thức RGB thô này thô hơn nhưng cho lượng đỏ vừa
-        // đủ, khớp đúng nhu cầu thực tế.
+        // dương ít nhất redThreshold đơn vị (mặc định 40, thang 0-255).
+        // Ngưỡng càng cao càng ít điểm ảnh đủ điều kiện thành đỏ - dùng
+        // để giảm lượng đỏ khi cần (thanh trượt "Giảm lượng đỏ" trên
+        // giao diện web điều khiển giá trị này).
         const redness = r - Math.max(g, b);
-        const candidates = redness > 40 ? BWR_PALETTE : BW_ONLY;
+        const candidates = redness > redThreshold ? BWR_PALETTE : BW_ONLY;
         // Trong số các lựa chọn ĐÃ LỌC ở trên, chọn màu gần nhất bằng
         // khoảng cách OKLab (chuẩn theo cảm nhận mắt người) thay vì RGB
         // thô - vẫn giữ được cải tiến này dù đã quay lại cách lọc cũ.
@@ -1083,7 +1086,9 @@
                             // thu nhỏ xuống độ phân giải thấp
 
     const brightnessAdj = parseInt($("threshRange").value, 10);
-    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj);
+    const redReduce = parseInt($("redReduce").value, 10); // 0-100
+    const redThreshold = 40 + redReduce; // 0->40 (mặc định), 100->140 (gần như tắt hẳn đỏ)
+    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj, redThreshold);
     packedImage = packed;
 
     const ctxDither = cDither.getContext("2d");
@@ -1128,6 +1133,7 @@
   $("threshRange").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
   $("agingLevel").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
   $("blackPoint").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
+  $("redReduce").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
 
   // ---------------------------------------------------------------
   // CRC32 chuẩn (IEEE 802.3 / zlib) - khớp đúng hàm crc32() trong
