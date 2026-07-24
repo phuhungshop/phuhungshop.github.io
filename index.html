@@ -417,6 +417,10 @@
     <div class="opt-row">
       <label><input type="range" id="threshRange" min="-60" max="60" value="0" style="width:140px"> Điều chỉnh độ sáng/tối</label>
     </div>
+    <div class="opt-row">
+      <label><input type="checkbox" id="edgeEnhance" checked> Vẽ đè viền cạnh (tăng cảm giác chi tiết)</label>
+      <label><input type="range" id="edgeThresh" min="20" max="150" value="60" style="width:140px"> Độ nhạy viền</label>
+    </div>
 
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
@@ -856,13 +860,50 @@
   ];
 
   // ---------------------------------------------------------------
+  // Dò biên cạnh (Sobel) + ép các điểm biên mạnh thành màu đen khi
+  // dithering: mắt người nhận biết "độ chi tiết/độ nét" của 1 bức ảnh
+  // chủ yếu qua đường viền các vật thể, không chỉ qua mật độ điểm ảnh -
+  // ở độ phân giải thấp (168x126), dithering thường làm mờ/nhoè viền.
+  // Vẽ đè viền đen rõ ràng lên đúng những chỗ có biên cạnh mạnh giúp
+  // ảnh trông "nét", nhận diện được vật thể/khuôn mặt dễ hơn hẳn, dù
+  // tổng số điểm ảnh không đổi - giống cách tranh ký hoạ/truyện tranh
+  // dùng nét viền đậm để gợi hình thay vì tô đầy chi tiết.
+  // ---------------------------------------------------------------
+  function computeEdgeMap(ctx, threshold){
+    const w = IMG_W, h = IMG_H;
+    const imgData = ctx.getImageData(0,0,w,h);
+    const px = imgData.data;
+    const gray = new Float32Array(w*h);
+    for(let i=0, p=0; i<w*h; i++, p+=4){
+      gray[i] = 0.299*px[p] + 0.587*px[p+1] + 0.114*px[p+2];
+    }
+    const edge = new Uint8Array(w*h);
+    const gx = [-1,0,1, -2,0,2, -1,0,1];
+    const gy = [-1,-2,-1, 0,0,0, 1,2,1];
+    for(let y=1; y<h-1; y++){
+      for(let x=1; x<w-1; x++){
+        let sx=0, sy=0, k=0;
+        for(let ky=-1; ky<=1; ky++){
+          for(let kx=-1; kx<=1; kx++){
+            const v = gray[(y+ky)*w+(x+kx)];
+            sx += v*gx[k]; sy += v*gy[k]; k++;
+          }
+        }
+        const mag = Math.sqrt(sx*sx+sy*sy);
+        edge[y*w+x] = (mag > threshold) ? 1 : 0;
+      }
+    }
+    return edge;
+  }
+
+  // ---------------------------------------------------------------
   // Dithering kiểu "rắn bò" (serpentine/boustrophedon): quét xen kẽ
   // trái->phải rồi phải->trái từng dòng, thay vì luôn trái->phải như
   // Floyd-Steinberg gốc. Cách này giảm hẳn vệt chéo đặc trưng hay thấy
   // ở dithering thường, ảnh trông "sạch" hơn, đặc biệt rõ ở độ phân
   // giải thấp như thế này.
   // ---------------------------------------------------------------
-  function ditherAndPack(ctx, brightnessAdj){
+  function ditherAndPack(ctx, brightnessAdj, edgeMap){
     const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
     const px = imgData.data;
     const n = IMG_W*IMG_H;
@@ -889,17 +930,26 @@
       for(let x=xStart; x!==xEnd; x+=dir){
         const idx = y*IMG_W+x;
         const r = errR[idx], g = errG[idx], b = errB[idx];
-        // "Sắc đỏ" = kênh đỏ trội hơn hẳn xanh lá/xanh dương. Chỉ cho phép
-        // chọn đỏ làm ứng viên khi có sắc đỏ rõ rệt.
-        const redness = r - Math.max(g, b);
-        const candidates = redness > 40 ? BWR_PALETTE : [BWR_PALETTE[0], BWR_PALETTE[1]];
-        let best = 0, bestDist = Infinity;
-        for(const c of candidates){
-          const d = (r-c.r)*(r-c.r) + (g-c.g)*(g-c.g) + (b-c.b)*(b-c.b);
-          if(d < bestDist){ bestDist = d; best = c.code; }
+        let best, chosen;
+        if(edgeMap && edgeMap[idx]){
+          // Là biên cạnh mạnh: ép luôn thành đen, không cho dithering
+          // "thương lượng" ra màu khác - đây chính là nét viền vẽ đè
+          best = 1;
+          chosen = BWR_PALETTE[1];
+        }else{
+          // "Sắc đỏ" = kênh đỏ trội hơn hẳn xanh lá/xanh dương. Chỉ cho
+          // phép chọn đỏ làm ứng viên khi có sắc đỏ rõ rệt.
+          const redness = r - Math.max(g, b);
+          const candidates = redness > 40 ? BWR_PALETTE : [BWR_PALETTE[0], BWR_PALETTE[1]];
+          let bestDist = Infinity;
+          best = 0;
+          for(const c of candidates){
+            const d = (r-c.r)*(r-c.r) + (g-c.g)*(g-c.g) + (b-c.b)*(b-c.b);
+            if(d < bestDist){ bestDist = d; best = c.code; }
+          }
+          chosen = BWR_PALETTE[best];
         }
         classify[idx] = best;
-        const chosen = BWR_PALETTE[best];
         diffuse(errR, x, y, r-chosen.r, dir);
         diffuse(errG, x, y, g-chosen.g, dir);
         diffuse(errB, x, y, b-chosen.b, dir);
@@ -946,8 +996,11 @@
     sharpen(ctxOrig, 0.5); // làm nét vừa phải, bù lại chi tiết mất khi
                             // thu nhỏ xuống độ phân giải thấp
 
+    const edgeOn = $("edgeEnhance").checked;
+    const edgeMap = edgeOn ? computeEdgeMap(ctxOrig, parseInt($("edgeThresh").value, 10)) : null;
+
     const brightnessAdj = parseInt($("threshRange").value, 10);
-    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj);
+    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj, edgeMap);
     packedImage = packed;
 
     const ctxDither = cDither.getContext("2d");
@@ -990,6 +1043,8 @@
     el.addEventListener("change", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
   });
   $("threshRange").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
+  $("edgeEnhance").addEventListener("change", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
+  $("edgeThresh").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
 
   // CRC32 chuẩn (IEEE 802.3/zlib), khớp hàm img_crc32_update() bên firmware
   let crcTable = null;
