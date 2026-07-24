@@ -912,14 +912,11 @@
     const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
     const px = imgData.data;
     const n = IMG_W*IMG_H;
-    const errL = new Float32Array(n), errA = new Float32Array(n), errB2 = new Float32Array(n);
+    const errR = new Float32Array(n), errG = new Float32Array(n), errB = new Float32Array(n);
     for(let i=0, p=0; i<n; i++, p+=4){
-      const ok = rgbToOKLab(
-        Math.max(0,Math.min(255, px[p]  +brightnessAdj)),
-        Math.max(0,Math.min(255, px[p+1]+brightnessAdj)),
-        Math.max(0,Math.min(255, px[p+2]+brightnessAdj))
-      );
-      errL[i] = ok.L; errA[i] = ok.a; errB2[i] = ok.b;
+      errR[i] = px[p]   + brightnessAdj;
+      errG[i] = px[p+1] + brightnessAdj;
+      errB[i] = px[p+2] + brightnessAdj;
     }
     const classify = new Uint8Array(n); // 0=trắng, 1=đen, 2=đỏ
 
@@ -940,26 +937,32 @@
       const xEnd = leftToRight ? IMG_W : -1;
       for(let x=xStart; x!==xEnd; x+=dir){
         const idx = y*IMG_W+x;
-        const L = errL[idx], A = errA[idx], B = errB2[idx];
-        // Chroma thật (độ bão hoà, sqrt(a²+b²) trong OKLab) - CHUẨN HƠN
-        // HẲN công thức RGB thô "R trừ max(G,B)" cũ để biết đây có phải
-        // là màu có sắc thật sự hay chỉ là xám trung tính. Đã kiểm thử:
-        // mọi mức xám (bất kể sáng/tối) đều cho chroma CHÍNH XÁC 0, còn
-        // màu có sắc (đỏ/cam/hồng/nâu...) đều > 0 rõ rệt - ngưỡng 0.03
-        // đủ để bắt được cả sắc đỏ nhạt mà vẫn loại được xám/da người.
-        const chroma = Math.sqrt(A*A + B*B);
-        const candidates = chroma > 0.03 ? BWR_PALETTE : BW_ONLY;
+        const r = errR[idx], g = errG[idx], b = errB[idx];
+        // QUAY LẠI công thức lọc "có phải đỏ không" CŨ (đã cân bằng tốt
+        // qua thực tế sử dụng): kênh đỏ phải trội hơn hẳn xanh lá/xanh
+        // dương ít nhất 40 đơn vị (thang 0-255). Công thức OKLab chroma
+        // thử trước đó QUÁ NHẠY, bắt cả da người/tông ấm thành đỏ dư
+        // thừa - công thức RGB thô này thô hơn nhưng cho lượng đỏ vừa
+        // đủ, khớp đúng nhu cầu thực tế.
+        const redness = r - Math.max(g, b);
+        const candidates = redness > 40 ? BWR_PALETTE : BW_ONLY;
+        // Trong số các lựa chọn ĐÃ LỌC ở trên, chọn màu gần nhất bằng
+        // khoảng cách OKLab (chuẩn theo cảm nhận mắt người) thay vì RGB
+        // thô - vẫn giữ được cải tiến này dù đã quay lại cách lọc cũ.
+        const pxOk = rgbToOKLab(
+          Math.max(0,Math.min(255,r)), Math.max(0,Math.min(255,g)), Math.max(0,Math.min(255,b))
+        );
         let best = 0, bestDist = Infinity;
         for(const c of candidates){
-          const dL = L-c.ok.L, dA = A-c.ok.a, dB = B-c.ok.b;
+          const dL = pxOk.L-c.ok.L, dA = pxOk.a-c.ok.a, dB = pxOk.b-c.ok.b;
           const d = dL*dL + dA*dA + dB*dB;
           if(d < bestDist){ bestDist = d; best = c.code; }
         }
-        const chosen = candidates.find(c => c.code===best);
+        const chosen = candidates.find(c => c.code===best).rgb;
         classify[idx] = best;
-        diffuse(errL,  x, y, L-chosen.ok.L, dir);
-        diffuse(errA,  x, y, A-chosen.ok.a, dir);
-        diffuse(errB2, x, y, B-chosen.ok.b, dir);
+        diffuse(errR, x, y, r-chosen.r, dir);
+        diffuse(errG, x, y, g-chosen.g, dir);
+        diffuse(errB, x, y, b-chosen.b, dir);
       }
     }
 
