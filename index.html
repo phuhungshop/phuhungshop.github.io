@@ -417,6 +417,9 @@
     <div class="opt-row">
       <label><input type="range" id="threshRange" min="-60" max="60" value="0" style="width:140px"> Điều chỉnh độ sáng/tối</label>
     </div>
+    <div class="opt-row">
+      <label><input type="range" id="agingLevel" min="0" max="100" value="0" style="width:140px"> Mức lão hóa màn hình (bù tương phản)</label>
+    </div>
 
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
@@ -825,6 +828,42 @@
   }
 
   // ---------------------------------------------------------------
+  // Hiệu chỉnh gamma - dùng để BÙ TRỪ MÀN HÌNH LÃO HÓA: hạt mực đen/
+  // trắng bên trong không còn "chuyển trạng thái hoàn toàn" như lúc
+  // mới (đen không còn đen thật, trắng không còn trắng thật - tương
+  // phản vật lý giảm theo thời gian sử dụng). gamma > 1 đẩy các điểm ảnh
+  // MÀU GIỮA (xám) về gần cực đen/trắng hơn TRƯỚC KHI dithering - bù lại
+  // phần tương phản sẽ bị mất do đặc tính vật lý của màn hình cũ, giúp
+  // ảnh vẫn còn "chi tiết" sau khi hiển thị thay vì bị nhòe hết thành
+  // xám. gamma=1.0 là không đổi gì; gamma càng cao càng đẩy mạnh (màn
+  // càng lão hóa nhiều thì nên chọn gamma cao hơn).
+  // ---------------------------------------------------------------
+  function applyGamma(ctx, gamma){
+    if(gamma === 1.0) return;
+    const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
+    const px = imgData.data;
+    // Bảng tra sẵn 256 giá trị - tính 1 lần, áp cho cả ảnh cho nhanh.
+    const lut = new Uint8ClampedArray(256);
+    for(let i=0; i<256; i++){
+      const v = i/255;
+      // Đẩy về 2 cực quanh điểm giữa 0.5 (không chỉ đơn thuần gamma
+      // chuẩn - gamma chuẩn chỉ lệch 1 phía, ở đây cần đẩy CẢ 2 phía ra
+      // xa điểm giữa để tăng tương phản, không làm lệch sáng/tối tổng
+      // thể của ảnh).
+      const centered = v - 0.5;
+      const sign = centered < 0 ? -1 : 1;
+      const boosted = sign * Math.pow(Math.abs(centered)*2, 1/gamma) * 0.5;
+      lut[i] = Math.round((boosted + 0.5) * 255);
+    }
+    for(let p=0; p<px.length; p+=4){
+      px[p]   = lut[px[p]];
+      px[p+1] = lut[px[p+1]];
+      px[p+2] = lut[px[p+2]];
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  // ---------------------------------------------------------------
   // Làm nét (unsharp mask đơn giản, kernel 3x3): ở độ phân giải thấp,
   // các cạnh/chi tiết dễ bị "nhòe" khi thu nhỏ - làm nét trước khi
   // chuyển sang đen-trắng-đỏ giúp giữ được cảm giác chi tiết rõ hơn,
@@ -1004,6 +1043,11 @@
     const fitmode = document.querySelector('input[name=fitmode]:checked').value;
     drawFitted(img, ctxOrig, fitmode);
     autoContrast(ctxOrig); // giãn hết cỡ dải sáng-tối thực tế của ảnh
+
+    const agingLevel = parseInt($("agingLevel").value, 10); // 0-100
+    const gamma = 1.0 + (agingLevel/100)*1.5; // 0->1.0 (không đổi), 100->2.5 (đẩy mạnh)
+    applyGamma(ctxOrig, gamma); // bù tương phản mất do màn hình lão hóa
+
     sharpen(ctxOrig, 0.5); // làm nét vừa phải, bù lại chi tiết mất khi
                             // thu nhỏ xuống độ phân giải thấp
 
@@ -1051,6 +1095,7 @@
     el.addEventListener("change", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
   });
   $("threshRange").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
+  $("agingLevel").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
 
   // ---------------------------------------------------------------
   // CRC32 chuẩn (IEEE 802.3 / zlib) - khớp đúng hàm crc32() trong
