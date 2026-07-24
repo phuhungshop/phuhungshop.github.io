@@ -1099,8 +1099,18 @@
 
     const brightnessAdj = parseInt($("threshRange").value, 10);
     const redReduce = parseInt($("redReduce").value, 10); // 0-100
-    const redThreshold = 40 + redReduce; // 0->40 (mặc định), 100->140 (gần như tắt hẳn đỏ)
     const noDither = $("graphicMode").checked;
+    // Chế độ đồ hoạ/chữ: dùng ngưỡng CƠ BẢN thấp hơn (15 thay vì 40).
+    // Lý do: chữ mỏng bị thu nhỏ mạnh (VD 1200px gốc xuống 168px, ~7 lần)
+    // khiến viền chữ (vốn là điểm ảnh pha trộn đỏ đậm + nền trắng khi
+    // khử răng cưa) bị pha loãng thành màu nâu xỉn, độ đỏ đôi khi tụt
+    // xuống dưới cả ngưỡng 40 - những điểm này bị loại khỏi diện "đỏ",
+    // rồi vô tình bị xếp vào ĐEN (vì hơi tối) thay vì ĐỎ hoặc TRẮNG như
+    // mắt người mong đợi - đây chính là lỗi "chữ đỏ lẫn đen" bạn thấy.
+    // Ngưỡng thấp hơn giúp các điểm viền pha loãng này vẫn được tính là
+    // đỏ, khớp đúng cảm nhận thị giác cho nội dung dạng chữ/đồ hoạ.
+    const baseThreshold = noDither ? 15 : 40;
+    const redThreshold = baseThreshold + redReduce;
     const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj, redThreshold, noDither);
     packedImage = packed;
 
