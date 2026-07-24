@@ -399,35 +399,10 @@
     </div>
   </section>
 
-  <!-- Draw doodle -->
-  <section class="card">
-    <h2><span class="idx">04</span> Vẽ tay lên màn hình</h2>
-    <p class="desc">Vẽ tự do bằng chuột/ngón tay — nét vẽ được gửi dưới dạng đường nét (không phải ảnh chụp), nên nhẹ hơn nhiều so với ảnh, không bị giới hạn độ phân giải nhiều như ảnh. Vẽ xong bấm "Gửi lên màn hình". Có thể xem lại nét vẽ trước đó bất cứ lúc nào.</p>
-
-    <div class="opt-row">
-      <label><input type="radio" name="penColor" value="black" checked> Bút đen</label>
-      <label><input type="radio" name="penColor" value="red"> Bút đỏ</label>
-    </div>
-
-    <canvas id="drawCanvas" width="400" height="300" style="width:100%; height:auto; aspect-ratio:400/300; background:#fff; border:1px solid var(--rule); border-radius:4px; touch-action:none; cursor:crosshair;"></canvas>
-
-    <div class="connect-row" style="margin-top:12px">
-      <button id="btnClearCanvas" class="secondary">Xoá bảng vẽ</button>
-    </div>
-
-    <div class="connect-row" style="margin-top:16px">
-      <button id="btnSend" class="wide" disabled>Gửi lên màn hình</button>
-    </div>
-    <progress id="sendProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
-    <div class="connect-row" style="margin-top:12px">
-      <button id="btnViewSaved" class="secondary" disabled>Xem lại nét vẽ đã lưu trên máy</button>
-    </div>
-  </section>
-
   <!-- Upload image -->
   <section class="card">
-    <h2><span class="idx">04b</span> Tải ảnh cá nhân lên màn hình</h2>
-    <p class="desc">Ảnh sẽ được cắt vừa khung 168×126, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash của thiết bị (dùng chung vùng nhớ với "Vẽ tay" ở trên — chỉ giữ được 1 trong 2, cái nào gửi/vẽ sau sẽ ghi đè cái trước), xem lại bất cứ lúc nào không cần gửi lại.</p>
+    <h2><span class="idx">04</span> Tải ảnh cá nhân lên màn hình</h2>
+    <p class="desc">Ảnh sẽ được cắt vừa khung 168×126, chuyển thành 3 màu đen-trắng-đỏ (dithering) để hiển thị đẹp trên màn e-paper 3 màu. Ảnh lưu tại flash của thiết bị, xem lại bất cứ lúc nào không cần gửi lại.</p>
 
     <div class="drop-zone" id="dropZone">
       <div class="icon">🖼️</div>
@@ -527,9 +502,7 @@
     $("btnSync").disabled = !connected;
     $("btnMode").disabled = !connected;
     $("btnCal").disabled = !connected;
-    $("btnViewSaved").disabled = !connected;
     $("btnViewSavedImg").disabled = !connected;
-    updateSendBtn();
     updateSendImgBtn();
     if(!connected){
       $("devName").textContent = "—";
@@ -769,131 +742,8 @@
   }
 
   // ---------------------------------------------------------------
-  // Bảng vẽ tay: vẽ tự do bằng chuột/ngón tay, gửi lên máy dưới dạng
-  // các nét vẽ (đường nối các điểm), không phải ảnh bitmap — nhẹ hơn
-  // nhiều so với gửi ảnh chụp, không bị giới hạn độ phân giải bởi RAM
-  // hạn hẹp của thiết bị như cách cũ.
-  //
-  // Giao thức (khớp đúng user_custs1_impl.c bên firmware):
-  // - 0x9A (1 byte): bắt đầu vẽ mới — xoá bảng
-  // - 0x9B (3~131 byte): 1 đoạn của 1 nét vẽ — cmd, flags(bit0=màu:
-  //   0 đen/1 đỏ; bit1=có phải điểm đầu của 1 nét vẽ mới không), số
-  //   điểm N (tối đa 31 điểm/gói để không vượt quá 1 gói BLE), rồi N
-  //   điểm mỗi điểm 4 byte (x_lo,x_hi,y_lo,y_hi, little-endian)
-  // - 0x9C (1 byte): kết thúc, hiển thị lên màn hình
-  // - 0x9D (1 byte): hiển thị lại nét vẽ đã lưu trên máy, không cần
-  //   gửi lại
   // ---------------------------------------------------------------
-
-  const CANVAS_W = 400, CANVAS_H = 300; // khớp đúng kích thước panel
-  const MAX_POINTS_PER_MSG = 31; // 3 + 31*4 = 127 byte, vừa 1 gói BLE
-  const MIN_POINT_DIST = 3; // px — điểm mới cách điểm trước ít nhất
-                              // ngần này mới ghi nhận, tránh dữ liệu
-                              // dày đặc vô ích khi rê chuột chậm
-
-  const canvas = $("drawCanvas");
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  let strokes = []; // mảng các nét vẽ, mỗi nét là {color, points:[{x,y},...]}
-  let curStroke = null;
-  let drawing = false;
-
-  function canvasPoint(e){
-    const rect = canvas.getBoundingClientRect();
-    const cx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-    const cy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-    // canvas hiển thị có thể bị CSS scale (width:100%), quy đổi lại
-    // đúng toạ độ gốc 400x300
-    const x = Math.round(cx * (CANVAS_W / rect.width));
-    const y = Math.round(cy * (CANVAS_H / rect.height));
-    return { x: Math.max(0, Math.min(CANVAS_W - 1, x)),
-             y: Math.max(0, Math.min(CANVAS_H - 1, y)) };
-  }
-
-  function currentPenColor(){
-    return document.querySelector('input[name=penColor]:checked').value;
-  }
-
-  function redrawAll(){
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    for(const s of strokes){
-      drawStrokeOnCanvas(s);
-    }
-  }
-
-  function drawStrokeOnCanvas(s){
-    if(s.points.length===0) return;
-    ctx.strokeStyle = s.color==="red" ? "#c81e1e" : "#000";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(s.points[0].x, s.points[0].y);
-    for(let i=1;i<s.points.length;i++){
-      ctx.lineTo(s.points[i].x, s.points[i].y);
-    }
-    if(s.points.length===1){
-      // 1 điểm duy nhất (chấm nhẹ) vẫn phải vẽ được gì đó nhìn thấy
-      ctx.lineTo(s.points[0].x+0.1, s.points[0].y+0.1);
-    }
-    ctx.stroke();
-  }
-
-  function startStroke(pt){
-    curStroke = { color: currentPenColor(), points: [pt] };
-    strokes.push(curStroke);
-    drawing = true;
-    updateSendBtn();
-  }
-
-  function extendStroke(pt){
-    if(!curStroke) return;
-    const last = curStroke.points[curStroke.points.length-1];
-    const dx = pt.x-last.x, dy = pt.y-last.y;
-    if(dx*dx+dy*dy < MIN_POINT_DIST*MIN_POINT_DIST) return;
-    curStroke.points.push(pt);
-    // vẽ ngay đoạn mới thêm, không cần vẽ lại toàn bộ cho mượt
-    ctx.strokeStyle = curStroke.color==="red" ? "#c81e1e" : "#000";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(last.x, last.y);
-    ctx.lineTo(pt.x, pt.y);
-    ctx.stroke();
-  }
-
-  function endStroke(){
-    drawing = false;
-    curStroke = null;
-  }
-
-  canvas.addEventListener("pointerdown", (e) => {
-    canvas.setPointerCapture(e.pointerId);
-    startStroke(canvasPoint(e));
-  });
-  canvas.addEventListener("pointermove", (e) => {
-    if(!drawing) return;
-    extendStroke(canvasPoint(e));
-  });
-  canvas.addEventListener("pointerup", endStroke);
-  canvas.addEventListener("pointercancel", endStroke);
-
-  $("btnClearCanvas").addEventListener("click", () => {
-    strokes = [];
-    curStroke = null;
-    redrawAll();
-    updateSendBtn();
-  });
-
-  function updateSendBtn(){
-    $("btnSend").disabled = !(device && device.gatt && device.gatt.connected && strokes.length>0);
-  }
-
-  // ---------------------------------------------------------------
-  // Gửi bảng vẽ: 0x9A (bắt đầu) -> nhiều gói 0x9B (mỗi nét vẽ chia
-  // thành các đoạn tối đa 31 điểm) -> 0x9C (kết thúc + hiển thị).
+  // Tiện ích chung: chờ + thử lại khi ghi BLE thất bại tạm thời
   // ---------------------------------------------------------------
   function sleep(ms){ return new Promise((r) => setTimeout(r, ms)); }
 
@@ -910,63 +760,6 @@
     }
     throw lastErr;
   }
-
-  async function sendDrawing(){
-    if(strokes.length===0){ log("Chưa vẽ gì để gửi.", "err"); return; }
-    if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
-
-    $("btnSend").disabled = true;
-    $("sendProgress").style.display = "block";
-    $("sendProgress").value = 0;
-
-    try{
-      await writeWithRetry([0x9a], 3);
-      log("Đã gửi lệnh bắt đầu (0x9a) - thiết bị đang xoá vùng nhớ…");
-      await sleep(500);
-
-      let totalMsgs = 0;
-      for(const s of strokes){
-        totalMsgs += Math.max(1, Math.ceil(s.points.length/MAX_POINTS_PER_MSG));
-      }
-      let sentMsgs = 0;
-
-      for(const s of strokes){
-        const colorBit = s.color==="red" ? 1 : 0;
-        for(let off=0; off<s.points.length; off+=MAX_POINTS_PER_MSG){
-          const chunk = s.points.slice(off, off+MAX_POINTS_PER_MSG);
-          const isFirst = (off===0);
-          const flags = colorBit | (isFirst ? 0x02 : 0x00);
-          const buf = new Uint8Array(3 + chunk.length*4);
-          buf[0] = 0x9b;
-          buf[1] = flags;
-          buf[2] = chunk.length;
-          chunk.forEach((p, i) => {
-            buf[3+i*4]   = p.x & 0xff;
-            buf[3+i*4+1] = (p.x>>8) & 0xff;
-            buf[3+i*4+2] = p.y & 0xff;
-            buf[3+i*4+3] = (p.y>>8) & 0xff;
-          });
-          await writeWithRetry(buf, 3);
-          await sleep(15);
-          sentMsgs++;
-          $("sendProgress").value = Math.round(sentMsgs/totalMsgs*90);
-        }
-      }
-
-      await writeWithRetry([0x9c], 3);
-      $("sendProgress").value = 100;
-      log(`Đã gửi xong ${strokes.length} nét vẽ. Thiết bị đang hiển thị…`, "ok");
-    }catch(err){
-      log("Lỗi khi gửi: " + err.message, "err");
-    }finally{
-      updateSendBtn();
-    }
-  }
-
-  async function viewSaved(){
-    await writeCommand([0x9d], "Xem lại nét vẽ đã lưu");
-  }
-
 
   // ---------------------------------------------------------------
   // Tải ảnh cá nhân: cắt vừa khung, chuyển xám, Floyd-Steinberg
@@ -1229,8 +1022,6 @@
   $("btnSync").addEventListener("click", syncTime);
   $("btnMode").addEventListener("click", switchMode);
   $("btnCal").addEventListener("click", calibrate);
-  $("btnSend").addEventListener("click", sendDrawing);
-  $("btnViewSaved").addEventListener("click", viewSaved);
   $("btnSendImg").addEventListener("click", sendImage);
   $("btnViewSavedImg").addEventListener("click", viewSavedImg);
 
