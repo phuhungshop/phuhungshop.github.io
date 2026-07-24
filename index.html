@@ -424,6 +424,9 @@
       <label><input type="range" id="blackPoint" min="0" max="120" value="0" style="width:140px"> Tăng điểm đen (giữ nguyên vùng sáng)</label>
     </div>
     <div class="opt-row">
+      <label><input type="checkbox" id="graphicMode"> Ảnh nhiều chữ/đồ hoạ (tắt rắc điểm, chọn màu đặc)</label>
+    </div>
+    <div class="opt-row">
       <label><input type="range" id="redReduce" min="0" max="100" value="0" style="width:140px"> Giảm lượng đỏ</label>
     </div>
 
@@ -978,7 +981,7 @@
   // Sai số giờ khuếch tán TRONG KHÔNG GIAN OKLab (L,a,b) thay vì RGB thô
   // - nhất quán với việc chọn màu cũng làm trong không gian này.
   // ---------------------------------------------------------------
-  function ditherAndPack(ctx, brightnessAdj, redThreshold){
+  function ditherAndPack(ctx, brightnessAdj, redThreshold, noDither){
     const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
     const px = imgData.data;
     const n = IMG_W*IMG_H;
@@ -990,7 +993,16 @@
     }
     const classify = new Uint8Array(n); // 0=trắng, 1=đen, 2=đỏ
 
+    // CHẾ ĐỘ ĐỒ HOẠ/CHỮ: bỏ qua khuếch tán sai số hoàn toàn - lý do:
+    // dithering (kể cả Atkinson) được thiết kế để mô phỏng SẮC ĐỘ TRUNG
+    // GIAN bằng cách rắc điểm - với ẢNH CHỤP mắt người không nhận ra,
+    // nhưng với CHỮ/MẢNG MÀU ĐẶC (vốn chỉ có 1-2 màu đồng nhất), nếu màu
+    // gốc không khớp CHÍNH XÁC màu màn hình hiển thị được, dithering sẽ
+    // tự rắc thêm điểm đen/trắng lốm đốm ngay trong vùng đáng lẽ phải
+    // đặc 1 màu - lỗi "chữ đỏ bị lẫn đen" là do đây. Tắt khuếch tán, chỉ
+    // chọn màu gần nhất tại chỗ cho từng điểm ảnh, giữ màu đặc/sạch.
     function diffuse(arr, x, y, e, dir){
+      if(noDither) return;
       const e8 = e/8;
       if(x+dir>=0   && x+dir<IMG_W)                arr[y*IMG_W+x+dir]      += e8;
       if(x+2*dir>=0 && x+2*dir<IMG_W)              arr[y*IMG_W+x+2*dir]    += e8;
@@ -1088,7 +1100,8 @@
     const brightnessAdj = parseInt($("threshRange").value, 10);
     const redReduce = parseInt($("redReduce").value, 10); // 0-100
     const redThreshold = 40 + redReduce; // 0->40 (mặc định), 100->140 (gần như tắt hẳn đỏ)
-    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj, redThreshold);
+    const noDither = $("graphicMode").checked;
+    const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj, redThreshold, noDither);
     packedImage = packed;
 
     const ctxDither = cDither.getContext("2d");
@@ -1134,6 +1147,7 @@
   $("agingLevel").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
   $("blackPoint").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
   $("redReduce").addEventListener("input", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
+  $("graphicMode").addEventListener("change", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
 
   // ---------------------------------------------------------------
   // CRC32 chuẩn (IEEE 802.3 / zlib) - khớp đúng hàm crc32() trong
