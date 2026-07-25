@@ -48,7 +48,6 @@
     padding:32px 20px 64px;
   }
 
-  /* ---------- Header ---------- */
   header{
     display:flex;
     align-items:flex-end;
@@ -73,16 +72,7 @@
     margin:0;
     letter-spacing:0.01em;
   }
-  .header-note{
-    font-size:12px;
-    color:var(--ink-soft);
-    text-align:right;
-    line-height:1.5;
-    max-width:220px;
-  }
-  .header-note a{ color:var(--focus); }
 
-  /* ---------- Device preview (signature element) ---------- */
   .device-shell{
     background:linear-gradient(180deg,#d9d4c6,#c7c1af);
     border-radius:14px;
@@ -136,9 +126,7 @@
     display:flex;
     align-items:center;
   }
-  .device-name{ font-weight:600; color:var(--ink); }
 
-  /* ---------- Cards ---------- */
   .card{
     background:var(--card);
     border:1px solid var(--rule);
@@ -172,7 +160,6 @@
 
   .connect-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 
-  /* ---------- Buttons ---------- */
   button{
     font-family:var(--font-mono);
     font-size:13px;
@@ -199,10 +186,6 @@
     background:transparent;
     color:var(--ink);
   }
-  button.danger{
-    background:var(--stamp-rust);
-    border-color:var(--stamp-rust-deep);
-  }
   button.wide{ width:100%; }
 
   .actions-grid{
@@ -211,7 +194,6 @@
     gap:10px;
   }
 
-  /* ---------- Stat row ---------- */
   .stats{
     display:grid;
     grid-template-columns:repeat(auto-fit, minmax(140px,1fr));
@@ -236,7 +218,6 @@
     margin-top:2px;
   }
 
-  /* ---------- Calibrate ---------- */
   .cal-row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .cal-row input{
     font-family:var(--font-mono);
@@ -248,10 +229,26 @@
     background:#fff;
     color:var(--ink);
   }
-  .cal-row input:focus-visible{ outline:2px solid var(--focus); }
   .cal-row label{ font-size:12px; color:var(--ink-soft); }
 
-  /* ---------- Image upload ---------- */
+  /* ---------- Device picker ---------- */
+  .device-picker{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-bottom:4px;
+  }
+  @media (max-width:480px){ .device-picker{ grid-template-columns:1fr; } }
+  .device-picker label{
+    display:flex; flex-direction:column; gap:4px;
+    border:1px solid var(--rule); border-radius:8px; padding:12px 14px;
+    cursor:pointer; background:#fff;
+  }
+  .device-picker label.active{ border-color:var(--stamp-green); background:#f2f7f4; }
+  .device-picker .name{ font-weight:700; font-size:13.5px; }
+  .device-picker .spec{ font-size:11px; color:var(--ink-faint); }
+  .device-picker input{ display:none; }
+
   .drop-zone{
     border:2px dashed var(--rule); border-radius:10px; padding:28px 16px;
     text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
@@ -273,6 +270,8 @@
 
   .opt-row{ display:flex; gap:16px; flex-wrap:wrap; margin:14px 0; font-size:12.5px; color:var(--ink-soft); }
   .opt-row label{ display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .opt-row.red-only{ transition:opacity .15s; }
+  .opt-row.red-only.disabled{ opacity:0.35; pointer-events:none; }
 
   progress{
     width:100%; height:16px; border-radius:8px; overflow:hidden; border:1px solid var(--rule);
@@ -282,7 +281,6 @@
   progress::-webkit-progress-value{ background:var(--stamp-green); }
   progress::-moz-progress-bar{ background:var(--stamp-green); }
 
-  /* ---------- Log ---------- */
   .log-head{
     display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;
   }
@@ -393,7 +391,7 @@
   <!-- Mode switch -->
   <section class="card">
     <h2><span class="idx">03</span> Đổi giao diện hiển thị</h2>
-    <p class="desc">Gửi lệnh chuyển sang giao diện tiếp theo trên màn hình (đồng hồ, lịch tháng, đồng hồ lật cơ, mặt kim...).</p>
+    <p class="desc">Gửi lệnh chuyển sang giao diện tiếp theo trên màn hình.</p>
     <div class="actions-grid">
       <button id="btnMode" disabled>Đổi giao diện</button>
     </div>
@@ -402,7 +400,20 @@
   <!-- Upload image -->
   <section class="card">
     <h2><span class="idx">04</span> Tải ảnh cá nhân lên màn hình</h2>
-    <p class="desc">Ảnh sẽ được cắt vừa khung 400×300 (độ phân giải GỐC của màn hình), chuyển thành 3 màu đen-trắng-đỏ (tự động giãn tương phản + làm nét + dithering Atkinson) để hiển thị nét nhất có thể. Dữ liệu được gửi thẳng xuống bộ nhớ màn hình, không lưu trữ lại trên thiết bị - muốn xem lại cần gửi lại từ đầu.</p>
+    <p class="desc">Chọn đúng loại màn hình bạn đang dùng, ảnh sẽ tự động xử lý đúng độ phân giải + số màu của màn đó, gửi <strong>thẳng vào bộ nhớ chip màn hình</strong> qua Bluetooth (không lưu trữ lại trên thiết bị — muốn xem lại cần gửi lại từ đây).</p>
+
+    <div class="device-picker" id="devicePicker">
+      <label id="devLabel42" class="active">
+        <input type="radio" name="deviceType" value="42" checked>
+        <span class="name">Màn 4.2 inch</span>
+        <span class="spec">400×300 · 3 màu (đen-trắng-đỏ)</span>
+      </label>
+      <label id="devLabel213">
+        <input type="radio" name="deviceType" value="213">
+        <span class="name">Màn 2.13 inch</span>
+        <span class="spec">212×104 · đen-trắng</span>
+      </label>
+    </div>
 
     <div class="drop-zone" id="dropZone">
       <div class="icon">🖼️</div>
@@ -426,18 +437,18 @@
     <div class="opt-row">
       <label><input type="checkbox" id="graphicMode"> Ảnh nhiều chữ/đồ hoạ (tắt rắc điểm, chọn màu đặc)</label>
     </div>
-    <div class="opt-row">
+    <div class="opt-row red-only" id="redReduceRow">
       <label><input type="range" id="redReduce" min="0" max="100" value="0" style="width:140px"> Giảm lượng đỏ</label>
     </div>
 
     <div class="preview-grid" id="previewGrid" style="display:none">
       <div class="preview-box">
         <div class="cap">Ảnh gốc (đã cắt)</div>
-        <canvas id="canvasOrig" width="400" height="300"></canvas>
+        <canvas id="canvasOrig"></canvas>
       </div>
       <div class="preview-box">
         <div class="cap">Xem trước trên e-paper</div>
-        <canvas id="canvasDither" width="400" height="300"></canvas>
+        <canvas id="canvasDither"></canvas>
       </div>
     </div>
 
@@ -481,21 +492,37 @@
   // ---------------------------------------------------------------
   // Hằng số giao thức BLE (khớp đúng user_custs1_def.c của firmware)
   // ---------------------------------------------------------------
-  const SVC_UUID         = "0000ff00-0000-1000-8000-00805f9b34fb"; // dịch vụ chính
-  const CHAR_LONGVAL    = "0000ff01-0000-1000-8000-00805f9b34fb"; // ghi lệnh (đối thời/đổi giao diện/hiệu chỉnh/ảnh)
-  const CHAR_ADCVAL     = "0000ff02-0000-1000-8000-00805f9b34fb"; // đọc điện áp pin (uint16 LE, đơn vị mV)
+  const SVC_UUID      = "0000ff00-0000-1000-8000-00805f9b34fb";
+  const CHAR_LONGVAL  = "0000ff01-0000-1000-8000-00805f9b34fb";
+  const CHAR_ADCVAL   = "0000ff02-0000-1000-8000-00805f9b34fb";
 
-  const IMG_W = 400, IMG_H = 300; // Độ phân giải GỐC của panel - kiến trúc
-                                    // mới: dữ liệu gửi THẲNG xuống bộ nhớ
-                                    // nội bộ chip màn hình (không qua flash,
-                                    // không phóng to trên chip Bluetooth) -
-                                    // né hoàn toàn giới hạn RAM của DA14585.
-  const IMG_PLANE_LEN = (IMG_W*IMG_H)/8; // 15000 byte/lớp
-  const IMG_DATA_LEN = IMG_PLANE_LEN*2;  // 30000 byte (đen-trắng + đỏ)
+  // ---------------------------------------------------------------
+  // Cấu hình 2 loại màn hình - kiến trúc chung: dữ liệu gửi THẲNG
+  // xuống bộ nhớ nội bộ chip màn hình (không qua flash, không phóng to
+  // trên chip Bluetooth) nên luôn dùng đúng độ phân giải GỐC của từng
+  // panel, không bị giới hạn bởi RAM của DA14585.
+  // ---------------------------------------------------------------
+  const DEVICES = {
+    "42": {
+      label: "4.2 inch",
+      W: 400, H: 300,
+      hasRed: true,
+    },
+    "213": {
+      label: "2.13 inch",
+      W: 212, H: 104,
+      hasRed: false,
+    },
+  };
+  let currentDevice = DEVICES["42"];
+  // Các biến này được cập nhật lại mỗi khi đổi thiết bị (xem applyDevice())
+  let IMG_W = currentDevice.W, IMG_H = currentDevice.H;
+  let IMG_PLANE_LEN = (IMG_W*IMG_H)/8;
+  let IMG_DATA_LEN = currentDevice.hasRed ? IMG_PLANE_LEN*2 : IMG_PLANE_LEN;
   const IMG_CHUNK_SIZE = 128;
 
   let device = null, gattServer = null, longValChar = null, adcChar = null;
-  let packedImage = null; // Uint8Array 30000 byte (2 lớp BWR), sẵn sàng gửi
+  let packedImage = null;
   let lastLoadedImg = null;
 
   // ---------------------------------------------------------------
@@ -532,6 +559,39 @@
   function updateSendBtn(){
     $("btnSend").disabled = !(device && device.gatt && device.gatt.connected && packedImage);
   }
+
+  // ---------------------------------------------------------------
+  // Chọn loại màn hình: cập nhật lại kích thước ảnh/canvas, ẩn/hiện
+  // tuỳ chọn "Giảm lượng đỏ" (chỉ có ý nghĩa với màn 3 màu), rồi xử lý
+  // lại ảnh đang chọn (nếu có) theo cấu hình mới.
+  // ---------------------------------------------------------------
+  function applyDevice(key){
+    currentDevice = DEVICES[key];
+    IMG_W = currentDevice.W;
+    IMG_H = currentDevice.H;
+    IMG_PLANE_LEN = (IMG_W*IMG_H)/8;
+    IMG_DATA_LEN = currentDevice.hasRed ? IMG_PLANE_LEN*2 : IMG_PLANE_LEN;
+
+    $("canvasOrig").width = IMG_W; $("canvasOrig").height = IMG_H;
+    $("canvasDither").width = IMG_W; $("canvasDither").height = IMG_H;
+
+    $("devLabel42").classList.toggle("active", key==="42");
+    $("devLabel213").classList.toggle("active", key==="213");
+
+    const redRow = $("redReduceRow");
+    redRow.classList.toggle("disabled", !currentDevice.hasRed);
+
+    packedImage = null;
+    $("previewGrid").style.display = "none";
+    updateSendBtn();
+
+    log(`Đã chọn màn ${currentDevice.label} (${IMG_W}×${IMG_H}${currentDevice.hasRed?", 3 màu":", đen-trắng"}).`);
+
+    if(lastLoadedImg){ processImage(lastLoadedImg); }
+  }
+  document.querySelectorAll('input[name=deviceType]').forEach((el) => {
+    el.addEventListener("change", (e) => applyDevice(e.target.value));
+  });
 
   // Đồng hồ hệ thống + xem trước - chạy độc lập, không cần kết nối
   function tickPreview(){
@@ -668,13 +728,17 @@
 
       const service = await gattServer.getPrimaryService(SVC_UUID);
       longValChar = await service.getCharacteristic(CHAR_LONGVAL);
-      adcChar = await service.getCharacteristic(CHAR_ADCVAL);
+      try{
+        adcChar = await service.getCharacteristic(CHAR_ADCVAL);
+      }catch(e){
+        adcChar = null; // một số firmware có thể không có đặc tính này
+      }
 
       $("devName").textContent = device.name || "(không tên)";
       setConnectedUI(true);
       log("Kết nối thành công.", "ok");
 
-      await readBattery();
+      if(adcChar){ await readBattery(); }
     }catch(err){
       log("Lỗi kết nối: " + err.message, "err");
       setConnectedUI(false);
@@ -696,7 +760,7 @@
   async function readBattery(){
     try{
       const val = await adcChar.readValue();
-      const mv = val.getUint16(0, true); // little-endian, đơn vị mV
+      const mv = val.getUint16(0, true);
       $("devVolt").textContent = (mv/1000).toFixed(2) + " V";
     }catch(err){
       log("Không đọc được điện áp: " + err.message, "err");
@@ -721,7 +785,7 @@
     const now = new Date();
     const yy = now.getFullYear(), mm = now.getMonth(), dd = now.getDate();
     const lunar = solarToLunar(dd, mm+1, yy, TIMEZONE);
-    const lYearByte = lunar.year - 2020; // firmware lưu offset từ năm 2020
+    const lYearByte = lunar.year - 2020;
     if(lYearByte < 0 || lYearByte > 255){
       log("Năm âm lịch ngoài phạm vi thiết bị hỗ trợ (2020-2275).", "err");
       return;
@@ -730,12 +794,12 @@
     buf[0] = 0x91;
     buf[1] = yy & 0xff;
     buf[2] = (yy >> 8) & 0xff;
-    buf[3] = mm;           // tháng dương, 0=Tháng 1 (đúng quy ước firmware)
-    buf[4] = dd;            // ngày dương, 1..31
+    buf[3] = mm;
+    buf[4] = dd;
     buf[5] = now.getHours();
     buf[6] = now.getMinutes();
     buf[7] = now.getSeconds();
-    buf[8] = now.getDay();  // 0=Chủ nhật .. 6=Thứ bảy, khớp firmware
+    buf[8] = now.getDay();
     buf[9] = lYearByte;
     buf[10] = lunar.month | (lunar.leap ? 0x80 : 0);
     buf[11] = lunar.day;
@@ -765,11 +829,7 @@
   }
 
   // ---------------------------------------------------------------
-  // Thu nhỏ ảnh chất lượng cao: thu từng bước, mỗi bước không quá 1/2,
-  // thay vì thu 1 bước tỷ lệ lớn (VD ảnh 3000px xuống 168px chỉ trong
-  // 1 lần vẽ). Thu nhiều bước tránh được hiện tượng răng cưa/mất chi
-  // tiết (aliasing) mà trình duyệt hay gặp khi thu ảnh tỷ lệ lớn 1 lần,
-  // đây là kỹ thuật chuẩn cho downscale chất lượng cao trên canvas.
+  // Thu nhỏ ảnh chất lượng cao: thu từng bước, mỗi bước không quá 1/2.
   // ---------------------------------------------------------------
   function drawFitted(img, ctx, mode){
     ctx.fillStyle = "#fff";
@@ -799,13 +859,7 @@
   }
 
   // ---------------------------------------------------------------
-  // Tự động giãn tương phản (auto-contrast, theo percentile của
-  // histogram): nhiều ảnh chụp thực tế không dùng hết dải sáng-tối
-  // [0,255] (VD sáng nhất chỉ tới 210, tối nhất chỉ từ 40) - ở độ phân
-  // giải thấp, ảnh "phẳng" kiểu này dithering ra sẽ mờ nhạt, thiếu cảm
-  // giác chi tiết. Kéo giãn theo percentile (bỏ qua 1% điểm sáng/tối
-  // nhất - tránh vài điểm nhiễu kéo lệch cả phép giãn) ra hết cỡ
-  // [0,255] giúp tận dụng hết dải tương phản, ảnh "có hồn" hơn hẳn.
+  // Tự động giãn tương phản (auto-contrast, theo percentile histogram)
   // ---------------------------------------------------------------
   function autoContrast(ctx){
     const w = IMG_W, h = IMG_H;
@@ -817,12 +871,12 @@
       const gray = Math.round(0.299*px[p] + 0.587*px[p+1] + 0.114*px[p+2]);
       hist[gray]++;
     }
-    const cutoff = Math.floor(n*0.01); // bỏ qua 1% điểm sáng/tối nhất
+    const cutoff = Math.floor(n*0.01);
     let lo = 0, hi = 255, acc = 0;
     for(lo=0; lo<255; lo++){ acc += hist[lo]; if(acc > cutoff) break; }
     acc = 0;
     for(hi=255; hi>0; hi--){ acc += hist[hi]; if(acc > cutoff) break; }
-    if(hi <= lo){ return; } // ảnh gần như 1 màu phẳng - không giãn được, bỏ qua
+    if(hi <= lo){ return; }
 
     const range = hi - lo;
     for(let p=0; p<px.length; p+=4){
@@ -835,13 +889,7 @@
   }
 
   // ---------------------------------------------------------------
-  // Điều chỉnh "điểm đen" (black point, kiểu công cụ Levels chuẩn):
-  // KHÁC với thanh "độ sáng/tối" (dịch chuyển ĐỀU cả ảnh) - cái này chỉ
-  // đẩy các điểm ảnh ĐÃ TỐI SẴN (dưới ngưỡng) về đen hẳn, rồi kéo giãn
-  // phần còn lại (từ ngưỡng->255) lấp đầy [0,255] - vùng sáng gần như
-  // không bị ảnh hưởng. Dùng khi muốn TĂNG DIỆN TÍCH ĐEN trong ảnh (ví
-  // dụ bóng tối/tóc/quần áo tối màu) mà không làm xám thêm phần còn lại
-  // của ảnh như khi chỉnh độ sáng/tối thông thường.
+  // Điều chỉnh "điểm đen" (black point, kiểu công cụ Levels chuẩn)
   // ---------------------------------------------------------------
   function applyBlackPoint(ctx, threshold){
     if(threshold <= 0) return;
@@ -860,28 +908,15 @@
   }
 
   // ---------------------------------------------------------------
-  // Hiệu chỉnh gamma - dùng để BÙ TRỪ MÀN HÌNH LÃO HÓA: hạt mực đen/
-  // trắng bên trong không còn "chuyển trạng thái hoàn toàn" như lúc
-  // mới (đen không còn đen thật, trắng không còn trắng thật - tương
-  // phản vật lý giảm theo thời gian sử dụng). gamma > 1 đẩy các điểm ảnh
-  // MÀU GIỮA (xám) về gần cực đen/trắng hơn TRƯỚC KHI dithering - bù lại
-  // phần tương phản sẽ bị mất do đặc tính vật lý của màn hình cũ, giúp
-  // ảnh vẫn còn "chi tiết" sau khi hiển thị thay vì bị nhòe hết thành
-  // xám. gamma=1.0 là không đổi gì; gamma càng cao càng đẩy mạnh (màn
-  // càng lão hóa nhiều thì nên chọn gamma cao hơn).
+  // Hiệu chỉnh gamma - bù trừ màn hình lão hóa
   // ---------------------------------------------------------------
   function applyGamma(ctx, gamma){
     if(gamma === 1.0) return;
     const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
     const px = imgData.data;
-    // Bảng tra sẵn 256 giá trị - tính 1 lần, áp cho cả ảnh cho nhanh.
     const lut = new Uint8ClampedArray(256);
     for(let i=0; i<256; i++){
       const v = i/255;
-      // Đẩy về 2 cực quanh điểm giữa 0.5 (không chỉ đơn thuần gamma
-      // chuẩn - gamma chuẩn chỉ lệch 1 phía, ở đây cần đẩy CẢ 2 phía ra
-      // xa điểm giữa để tăng tương phản, không làm lệch sáng/tối tổng
-      // thể của ảnh).
       const centered = v - 0.5;
       const sign = centered < 0 ? -1 : 1;
       const boosted = sign * Math.pow(Math.abs(centered)*2, 1/gamma) * 0.5;
@@ -896,10 +931,7 @@
   }
 
   // ---------------------------------------------------------------
-  // Làm nét (unsharp mask đơn giản, kernel 3x3): ở độ phân giải thấp,
-  // các cạnh/chi tiết dễ bị "nhòe" khi thu nhỏ - làm nét trước khi
-  // chuyển sang đen-trắng-đỏ giúp giữ được cảm giác chi tiết rõ hơn,
-  // đặc biệt là viền các vật thể trong ảnh.
+  // Làm nét (unsharp mask đơn giản, kernel 3x3)
   // ---------------------------------------------------------------
   function sharpen(ctx, amount){
     const w = IMG_W, h = IMG_H;
@@ -910,7 +942,6 @@
       for(let x=0; x<w; x++){
         const idx = (y*w+x)*4;
         for(let c=0; c<3; c++){
-          // Kernel sharpen chuẩn: center*5 - (trên+dưới+trái+phải)
           const center = sp[idx+c];
           const up    = sp[((y>0?y-1:0)*w+x)*4+c];
           const down  = sp[((y<h-1?y+1:h-1)*w+x)*4+c];
@@ -926,14 +957,7 @@
   }
 
   // ---------------------------------------------------------------
-  // Chuyển sRGB -> OKLab (không gian màu "đều theo cảm nhận", công bố
-  // năm 2020, hiện là lựa chọn tiêu chuẩn cho các công cụ dithering hiện
-  // đại - xem https://bottosson.github.io/posts/oklab/). Lý do đổi từ
-  // so khoảng cách RGB thô sang OKLab: mắt người KHÔNG cảm nhận khác
-  // biệt màu theo kiểu khoảng cách Euclid trong RGB - OKLab được thiết
-  // kế sao cho khoảng cách toán học TRONG không gian này khớp với mức
-  // độ khác biệt màu MẮT NGƯỜI THỰC SỰ CẢM NHẬN, giúp chọn màu (trắng/
-  // đen/đỏ) nào là "gần nhất" chuẩn xác hơn hẳn so với RGB thô.
+  // sRGB -> OKLab (không gian màu "đều theo cảm nhận")
   // ---------------------------------------------------------------
   function srgbToLinear(c){
     c = c/255;
@@ -952,33 +976,27 @@
     };
   }
 
-  // Bảng màu mục tiêu: trắng, đen, đỏ (đỏ trên e-paper thường tối hơn đỏ
-  // thuần trên màn hình máy tính, dùng giá trị gần thực tế hơn để phân
-  // loại chính xác hơn) - toạ độ OKLab tính sẵn 1 lần.
-  const BWR_PALETTE = [
-    {rgb:{r:255,g:255,b:255}, ok:rgbToOKLab(255,255,255), code:0}, // trắng
-    {rgb:{r:0,  g:0,  b:0  }, ok:rgbToOKLab(0,0,0),       code:1}, // đen
-    {rgb:{r:190,g:30, b:30 }, ok:rgbToOKLab(190,30,30),   code:2}, // đỏ
-  ];
+  // Bảng màu mục tiêu - tuỳ theo màn có đỏ hay không (2 hoặc 3 màu).
+  // Tính lại mỗi lần cần dùng theo currentDevice, không cố định 1 bảng.
+  function getPalette(){
+    const white = {rgb:{r:255,g:255,b:255}, ok:rgbToOKLab(255,255,255), code:0};
+    const black = {rgb:{r:0,  g:0,  b:0  }, ok:rgbToOKLab(0,0,0),       code:1};
+    if(currentDevice.hasRed){
+      const red = {rgb:{r:190,g:30,b:30}, ok:rgbToOKLab(190,30,30), code:2};
+      return [white, black, red];
+    }
+    return [white, black];
+  }
 
   // ---------------------------------------------------------------
-  // Dithering kiểu Atkinson (thay cho Floyd-Steinberg): chỉ khuếch tán
-  // 75% sai số ra 6 điểm lân cận (mỗi điểm 1/8), bỏ qua 25% còn lại -
-  // thay vì khuếch tán đủ 100% như Floyd-Steinberg. Đã xác nhận qua
-  // nghiên cứu: kiểu này cho ảnh tương phản cao hơn hẳn, giữ được hình
-  // dạng/cấu trúc vật thể rõ ràng, "sạch" hơn - đúng loại "cảm giác chi
-  // tiết" mắt người nhận ra tốt nhất ở độ phân giải cực thấp (đánh đổi:
-  // mất chút chi tiết ở vùng rất sáng/rất tối, nhưng không đáng kể với
-  // ảnh chân dung/vật thể thông thường). Đây chính là thuật toán Bill
-  // Atkinson dùng cho Macintosh 1984, và vẫn là lựa chọn phổ biến nhất
-  // cho thiết bị e-paper độ phân giải thấp hiện nay.
-  // Vẫn giữ quét kiểu "rắn bò" (serpentine) - quét xen kẽ trái->phải rồi
-  // phải->trái từng dòng, giảm vệt chéo đặc trưng của dithering thường.
-  //
-  // Sai số giờ khuếch tán TRONG KHÔNG GIAN OKLab (L,a,b) thay vì RGB thô
-  // - nhất quán với việc chọn màu cũng làm trong không gian này.
+  // Dithering kiểu Atkinson trong không gian OKLab, quét "rắn bò".
+  // Tự động dùng bảng màu 2 hoặc 3 màu tuỳ currentDevice - với màn
+  // đen-trắng, chromaWeight không có tác dụng gì (không có ứng viên
+  // màu đỏ để so), nhưng để nguyên tham số cho code gọn, không cần
+  // nhánh riêng.
   // ---------------------------------------------------------------
   function ditherAndPack(ctx, brightnessAdj, chromaWeight, noDither){
+    const palette = getPalette();
     const imgData = ctx.getImageData(0,0,IMG_W,IMG_H);
     const px = imgData.data;
     const n = IMG_W*IMG_H;
@@ -988,16 +1006,8 @@
       errG[i] = px[p+1] + brightnessAdj;
       errB[i] = px[p+2] + brightnessAdj;
     }
-    const classify = new Uint8Array(n); // 0=trắng, 1=đen, 2=đỏ
+    const classify = new Uint8Array(n);
 
-    // CHẾ ĐỘ ĐỒ HOẠ/CHỮ: bỏ qua khuếch tán sai số hoàn toàn - lý do:
-    // dithering (kể cả Atkinson) được thiết kế để mô phỏng SẮC ĐỘ TRUNG
-    // GIAN bằng cách rắc điểm - với ẢNH CHỤP mắt người không nhận ra,
-    // nhưng với CHỮ/MẢNG MÀU ĐẶC (vốn chỉ có 1-2 màu đồng nhất), nếu màu
-    // gốc không khớp CHÍNH XÁC màu màn hình hiển thị được, dithering sẽ
-    // tự rắc thêm điểm đen/trắng lốm đốm ngay trong vùng đáng lẽ phải
-    // đặc 1 màu - lỗi "chữ đỏ bị lẫn đen" là do đây. Tắt khuếch tán, chỉ
-    // chọn màu gần nhất tại chỗ cho từng điểm ảnh, giữ màu đặc/sạch.
     function diffuse(arr, x, y, e, dir){
       if(noDither) return;
       const e8 = e/8;
@@ -1017,26 +1027,16 @@
       for(let x=xStart; x!==xEnd; x+=dir){
         const idx = y*IMG_W+x;
         const r = errR[idx], g = errG[idx], b = errB[idx];
-        // CÔNG THỨC THỐNG NHẤT (thay hẳn cách cũ "lọc ngưỡng rồi mới so
-        // khoảng cách riêng"): luôn so khoảng cách OKLab với CẢ 3 màu
-        // (trắng/đen/đỏ) cùng lúc, nhưng NHÂN THÊM trọng số cho phần sắc
-        // độ (a,b) so với độ sáng (L) - lý do: bất kỳ điểm ảnh nào đủ TỐI
-        // cũng sẽ "gần đen" hơn "gần đỏ" nếu tính đều 3 chiều như nhau
-        // (đen có độ sáng=0, đỏ chỉ ở khoảng giữa ~0.52) - dù điểm đó có
-        // chút sắc đỏ. Tăng trọng số sắc độ giúp CHỈ CẦN có "dấu vết" màu
-        // đỏ là đủ để thắng đen, đúng cảm nhận mắt người hơn. Đã kiểm thử
-        // qua nhiều bộ màu (xám, da người, cam, nâu, viền chữ pha loãng)
-        // để chọn ra trọng số cân bằng tốt nhất.
         const pxOk = rgbToOKLab(
           Math.max(0,Math.min(255,r)), Math.max(0,Math.min(255,g)), Math.max(0,Math.min(255,b))
         );
         let best = 0, bestDist = Infinity;
-        for(const c of BWR_PALETTE){
+        for(const c of palette){
           const dL = pxOk.L-c.ok.L, dA = pxOk.a-c.ok.a, dB = pxOk.b-c.ok.b;
           const d = dL*dL + chromaWeight*(dA*dA + dB*dB);
           if(d < bestDist){ bestDist = d; best = c.code; }
         }
-        const chosen = BWR_PALETTE.find(c => c.code===best).rgb;
+        const chosen = palette.find(c => c.code===best).rgb;
         classify[idx] = best;
         diffuse(errR, x, y, r-chosen.r, dir);
         diffuse(errG, x, y, g-chosen.g, dir);
@@ -1044,8 +1044,10 @@
       }
     }
 
+    // Đóng gói: màn có đỏ thì 2 lớp (đen-trắng + đỏ) nối liền nhau;
+    // màn đen-trắng thuần chỉ có đúng 1 lớp.
     const bwPlane = new Uint8Array(IMG_PLANE_LEN);
-    const redPlane = new Uint8Array(IMG_PLANE_LEN);
+    const redPlane = currentDevice.hasRed ? new Uint8Array(IMG_PLANE_LEN) : null;
     for(let y=0; y<IMG_H; y++){
       for(let xByte=0; xByte<IMG_W/8; xByte++){
         let bwByte = 0, redByte = 0;
@@ -1053,24 +1055,27 @@
           const x = xByte*8+b;
           const c = classify[y*IMG_W+x];
           const bwBit = (c===1) ? 0 : 1;
-          const redBit = (c===2) ? 1 : 0;
-          bwByte  |= (bwBit<<(7-b));
-          redByte |= (redBit<<(7-b));
+          bwByte |= (bwBit<<(7-b));
+          if(redPlane){
+            const redBit = (c===2) ? 1 : 0;
+            redByte |= (redBit<<(7-b));
+          }
         }
-        bwPlane[y*(IMG_W/8)+xByte]  = bwByte;
-        redPlane[y*(IMG_W/8)+xByte] = redByte;
+        bwPlane[y*(IMG_W/8)+xByte] = bwByte;
+        if(redPlane){ redPlane[y*(IMG_W/8)+xByte] = redByte; }
       }
     }
     const packed = new Uint8Array(IMG_DATA_LEN);
     packed.set(bwPlane, 0);
-    packed.set(redPlane, IMG_PLANE_LEN);
+    if(redPlane){ packed.set(redPlane, IMG_PLANE_LEN); }
     return { packed, classify };
   }
 
   function renderPreviewFromBW(ctx, classify){
+    const palette = getPalette();
     const imgData = ctx.createImageData(IMG_W, IMG_H);
     for(let i=0;i<classify.length;i++){
-      const c = BWR_PALETTE[classify[i]].rgb;
+      const c = palette[classify[i]].rgb;
       imgData.data[i*4]=c.r; imgData.data[i*4+1]=c.g; imgData.data[i*4+2]=c.b; imgData.data[i*4+3]=255;
     }
     ctx.putImageData(imgData,0,0);
@@ -1081,29 +1086,21 @@
     const ctxOrig = cOrig.getContext("2d");
     const fitmode = document.querySelector('input[name=fitmode]:checked').value;
     drawFitted(img, ctxOrig, fitmode);
-    autoContrast(ctxOrig); // giãn hết cỡ dải sáng-tối thực tế của ảnh
+    autoContrast(ctxOrig);
 
-    const agingLevel = parseInt($("agingLevel").value, 10); // 0-100
-    const gamma = 1.0 + (agingLevel/100)*1.5; // 0->1.0 (không đổi), 100->2.5 (đẩy mạnh)
-    applyGamma(ctxOrig, gamma); // bù tương phản mất do màn hình lão hóa
+    const agingLevel = parseInt($("agingLevel").value, 10);
+    const gamma = 1.0 + (agingLevel/100)*1.5;
+    applyGamma(ctxOrig, gamma);
 
     const blackPointVal = parseInt($("blackPoint").value, 10);
-    applyBlackPoint(ctxOrig, blackPointVal); // tăng diện tích đen, giữ nguyên vùng sáng
+    applyBlackPoint(ctxOrig, blackPointVal);
 
-    sharpen(ctxOrig, 0.5); // làm nét vừa phải, bù lại chi tiết mất khi
-                            // thu nhỏ xuống độ phân giải thấp
+    sharpen(ctxOrig, 0.5);
 
     const brightnessAdj = parseInt($("threshRange").value, 10);
-    const redReduce = parseInt($("redReduce").value, 10); // 0-100
+    const redReduce = currentDevice.hasRed ? parseInt($("redReduce").value, 10) : 100;
     const noDither = $("graphicMode").checked;
-    // CÔNG THỨC THỐNG NHẤT (thay hẳn cách "lọc ngưỡng rồi so riêng" cũ -
-    // cách cũ luôn để lọt một số điểm viền chữ pha loãng bị xếp nhầm
-    // thành đen dù đáng lẽ phải là đỏ/trắng, đã kiểm chứng bằng dữ liệu
-    // ảnh thật). Trọng số sắc độ (chromaWeight) mặc định 6 - đã kiểm thử
-    // qua nhiều bộ màu (xám, da người, cam, nâu, viền chữ...) cho kết
-    // quả cân bằng tốt nhất. Thanh "Giảm lượng đỏ" giờ giảm dần trọng số
-    // này (giảm sắc độ càng nhiều, đỏ càng khó thắng đen/trắng).
-    const chromaWeight = 6 * (1 - redReduce/120); // 0->6 (mặc định), 100->1.5
+    const chromaWeight = 6 * (1 - redReduce/120);
     const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj, chromaWeight, noDither);
     packedImage = packed;
 
@@ -1153,34 +1150,10 @@
   $("graphicMode").addEventListener("change", () => { if(lastLoadedImg) processImage(lastLoadedImg); });
 
   // ---------------------------------------------------------------
-  // CRC32 chuẩn (IEEE 802.3 / zlib) - khớp đúng hàm crc32() trong
-  // spi_flash.c của firmware (đã đối chiếu bảng hệ số, trùng khớp).
-  // ---------------------------------------------------------------
-  let crcTable = null;
-  function makeCrcTable(){
-    const table = new Uint32Array(256);
-    for(let n=0; n<256; n++){
-      let c = n;
-      for(let k=0; k<8; k++){
-        c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-      }
-      table[n] = c;
-    }
-    return table;
-  }
-  function crc32(buf){
-    if(!crcTable) crcTable = makeCrcTable();
-    let crc = 0 ^ 0xFFFFFFFF;
-    for(let i=0; i<buf.length; i++){
-      crc = crcTable[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
-    }
-    return (crc ^ 0xFFFFFFFF) >>> 0;
-  }
-
-  // ---------------------------------------------------------------
-  // Gửi ảnh: 0x96 (bắt đầu) -> nhiều gói 0x97 (128 byte/gói) -> 0x98
-  // (kết thúc + CRC32). Xem chi tiết giao thức trong user_custs1_impl.c
-  // của firmware (img_transfer_start/chunk/end).
+  // Gửi ảnh: 0x96 (bắt đầu) -> nhiều gói 0x97 (128 byte/gói). Gói cuối
+  // tự động kích hoạt hiển thị bên firmware (cả 2 dự án đều đã làm
+  // theo kiến trúc "gửi thẳng" này) - không cần CRC hay lệnh kết thúc
+  // riêng nữa.
   // ---------------------------------------------------------------
   function sleep(ms){ return new Promise((r) => setTimeout(r, ms)); }
 
@@ -1192,7 +1165,7 @@
         return;
       }catch(err){
         lastErr = err;
-        await sleep(150); // chờ 1 chút trước khi thử lại, cho kết nối ổn định lại
+        await sleep(150);
       }
     }
     throw lastErr;
@@ -1216,7 +1189,7 @@
       startBuf[7] = (IMG_DATA_LEN>>16) & 0xff;
       startBuf[8] = (IMG_DATA_LEN>>24) & 0xff;
       await writeWithRetry(startBuf, 3);
-      log("Đã gửi lệnh bắt đầu (0x96) - thiết bị đang mở phiên ghi màn hình…");
+      log(`Đã gửi lệnh bắt đầu (0x96) cho màn ${currentDevice.label} - thiết bị đang mở phiên ghi màn hình…`);
 
       const totalChunks = Math.ceil(IMG_DATA_LEN/IMG_CHUNK_SIZE);
       for(let i=0; i<totalChunks; i++){
@@ -1228,16 +1201,14 @@
         buf[1] = i & 0xff;
         buf[2] = (i>>8) & 0xff;
         buf.set(chunkData, 3);
-        await writeWithRetry(buf, 3); // thử lại tối đa 3 lần nếu gặp lỗi GATT tạm thời
-        await sleep(15); // nghỉ nhỏ giữa các gói - gửi liên tục quá nhanh dễ gây "GATT operation failed"
+        await writeWithRetry(buf, 3);
+        await sleep(15);
         $("sendProgress").value = Math.round((i+1)/totalChunks*100);
         if(i % 20 === 0){
           log(`Đã gửi gói ${i+1}/${totalChunks}…`);
         }
       }
 
-      // KHÔNG còn lệnh kết thúc riêng (0x98) hay CRC32 nữa - thiết bị tự
-      // động kích hoạt làm mới màn hình ngay khi nhận đủ byte cuối cùng.
       log(`Đã gửi xong toàn bộ ${totalChunks} gói. Thiết bị đang hiển thị ảnh…`, "ok");
     }catch(err){
       log("Lỗi khi gửi ảnh: " + err.message, "err");
@@ -1261,6 +1232,9 @@
   $("btnCal").addEventListener("click", calibrate);
   $("btnSend").addEventListener("click", sendImage);
 
+  // Khởi tạo canvas + trạng thái ban đầu theo thiết bị mặc định (4.2")
+  $("canvasOrig").width = IMG_W; $("canvasOrig").height = IMG_H;
+  $("canvasDither").width = IMG_W; $("canvasDither").height = IMG_H;
   setConnectedUI(false);
 })();
 </script>
