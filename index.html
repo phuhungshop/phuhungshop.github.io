@@ -1256,6 +1256,34 @@
       }
 
       log(`Đã gửi xong toàn bộ ${totalChunks} gói. Thiết bị đang hiển thị ảnh…`, "ok");
+
+      // CHẨN ĐOÁN (không cần UART): đọc lại chính characteristic vừa ghi -
+      // firmware đã tự "bơm" checksum nó thực sự nhận được vào đó ngay
+      // sau khi xong (xem imgd_chunk() trong user_custs1_impl.c). Đợi 1
+      // chút cho chắc firmware xử lý xong trước khi đọc.
+      try{
+        await sleep(200);
+        const readBuf = await longValChar.readValue();
+        if(readBuf.byteLength>=11 && readBuf.getUint8(0)===0x99){
+          const fwChecksum  = readBuf.getUint32(1, true);
+          const fwTotalLen  = readBuf.getUint32(5, true);
+          const fwChunks    = readBuf.getUint16(9, true);
+          const fwChecksumHex = fwChecksum.toString(16).padStart(8,'0');
+          const webChecksumHex = checksum.toString(16).padStart(8,'0');
+          log(`Firmware báo đã nhận: ${fwTotalLen} byte, ${fwChunks} gói, checksum=${fwChecksumHex}`);
+          if(fwTotalLen !== IMG_DATA_LEN){
+            log(`⚠️ SAI SỐ LƯỢNG BYTE: web gửi ${IMG_DATA_LEN}, firmware nhận ${fwTotalLen} - có gói bị rớt/thiếu.`, "err");
+          }else if(fwChecksumHex === webChecksumHex){
+            log(`✅ Checksum KHỚP (${webChecksumHex}) - byte nhận đúng 100% qua Bluetooth. Lỗi (nếu ảnh vẫn nhiễu) chắc chắn nằm ở khâu VẼ trong firmware, không phải do truyền BLE.`, "ok");
+          }else{
+            log(`❌ Checksum KHÁC NHAU: web=${webChecksumHex}, firmware=${fwChecksumHex} - dữ liệu bị sai ngay khi truyền qua Bluetooth.`, "err");
+          }
+        }else{
+          log("Không đọc được checksum chẩn đoán từ firmware (firmware có thể là bản cũ chưa có tính năng này).", "err");
+        }
+      }catch(diagErr){
+        log("Không đọc lại được checksum từ firmware: " + diagErr.message, "err");
+      }
     }catch(err){
       log("Lỗi khi gửi ảnh: " + err.message, "err");
     }finally{
