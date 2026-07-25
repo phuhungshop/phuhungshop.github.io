@@ -1221,6 +1221,17 @@
       await writeWithRetry(startBuf, 3);
       log(`Đã gửi lệnh bắt đầu (0x96) cho màn ${currentDevice.label} - thiết bị đang mở phiên ghi màn hình…`);
 
+      // CHẨN ĐOÁN: checksum cộng dồn toàn bộ byte SẼ gửi (trước khi gửi),
+      // dùng ĐÚNG công thức cộng dồn u32 y hệt firmware (imgd_checksum
+      // trong user_custs1_impl.c). Sau khi gửi xong, so số này với dòng
+      // "IMG done: ... checksum=..." trong log UART của firmware:
+      //   - Khớp nhau -> byte nhận đúng 100%, lỗi nằm ở khâu vẽ trong
+      //     firmware (row/col/x/y hoặc draw_pixel), không phải BLE.
+      //   - Khác nhau -> byte bị sai/thiếu ngay khi truyền qua Bluetooth.
+      let checksum = 0;
+      for(let k=0; k<packedImage.length; k++){ checksum = (checksum + packedImage[k]) >>> 0; }
+      log(`Checksum dữ liệu SẼ gửi: ${checksum.toString(16).padStart(8,'0')} (đối chiếu với dòng "IMG done" trong log UART firmware)`);
+
       // Kích thước gói PHẢI khớp đúng IMGD_CHUNK_SIZE của đúng firmware
       // đang chọn (xem chunkSize trong DEVICES ở trên) - 2 firmware hiện
       // đang dùng 2 con số khác nhau (42: 128, 213: 17), không được dùng
