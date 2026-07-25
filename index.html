@@ -517,11 +517,23 @@
       label: "4.2 inch",
       W: 400, H: 300,
       hasRed: true,
+      // Firmware bản 4.2" (dự án 1, src/user_custs1_impl.c) hardcode
+      // IMGD_CHUNK_SIZE=128 - GIỮ NGUYÊN, không đổi, vì file firmware đó
+      // chưa được sửa sang 17 byte/gói. Đổi ở đây mà không đổi firmware
+      // tương ứng sẽ làm lệch hẳn phép tính chunk_index*IMGD_CHUNK_SIZE
+      // bên firmware, hỏng luôn thiết bị này.
+      chunkSize: 128,
     },
     "213": {
       label: "2.13 inch",
       W: 212, H: 104,
       hasRed: false,
+      // Firmware bản 2.13" (dự án 2) đã sửa IMGD_CHUNK_SIZE xuống 17 byte
+      // (xem user_custs1_impl.c) để mỗi gói luôn vừa khít 1 lần ghi ATT
+      // trực tiếp (20 byte cả header), tránh cơ chế "ghi dài" không ổn
+      // định từng gây nhiễu ảnh khi lên màn hình thật. PHẢI khớp đúng
+      // con số này với firmware, không tự ý đổi một bên.
+      chunkSize: 17,
     },
   };
   let currentDevice = DEVICES["42"];
@@ -530,7 +542,7 @@
   let IMG_LINE_BYTES = Math.ceil(IMG_W/8);              // số byte/hàng, ĐỆM TRÒN BYTE
   let IMG_PLANE_LEN = IMG_LINE_BYTES*IMG_H;               // 1 lớp (đen/trắng hoặc đỏ)
   let IMG_DATA_LEN = currentDevice.hasRed ? IMG_PLANE_LEN*2 : IMG_PLANE_LEN;
-  const IMG_CHUNK_SIZE = 128;
+  // (kích thước gói giờ lấy theo currentDevice.chunkSize - xem DEVICES ở trên)
 
   let device = null, gattServer = null, longValChar = null, adcChar = null;
   let packedImage = null;
@@ -1209,10 +1221,15 @@
       await writeWithRetry(startBuf, 3);
       log(`Đã gửi lệnh bắt đầu (0x96) cho màn ${currentDevice.label} - thiết bị đang mở phiên ghi màn hình…`);
 
-      const totalChunks = Math.ceil(IMG_DATA_LEN/IMG_CHUNK_SIZE);
+      // Kích thước gói PHẢI khớp đúng IMGD_CHUNK_SIZE của đúng firmware
+      // đang chọn (xem chunkSize trong DEVICES ở trên) - 2 firmware hiện
+      // đang dùng 2 con số khác nhau (42: 128, 213: 17), không được dùng
+      // chung 1 hằng số cho cả 2 thiết bị.
+      const chunkSize = currentDevice.chunkSize;
+      const totalChunks = Math.ceil(IMG_DATA_LEN/chunkSize);
       for(let i=0; i<totalChunks; i++){
-        const off = i*IMG_CHUNK_SIZE;
-        const end = Math.min(off+IMG_CHUNK_SIZE, IMG_DATA_LEN);
+        const off = i*chunkSize;
+        const end = Math.min(off+chunkSize, IMG_DATA_LEN);
         const chunkData = packedImage.slice(off, end);
         const buf = new Uint8Array(3+chunkData.length);
         buf[0] = 0x97;
