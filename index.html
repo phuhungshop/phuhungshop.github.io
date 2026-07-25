@@ -501,6 +501,16 @@
   // xuống bộ nhớ nội bộ chip màn hình (không qua flash, không phóng to
   // trên chip Bluetooth) nên luôn dùng đúng độ phân giải GỐC của từng
   // panel, không bị giới hạn bởi RAM của DA14585.
+  //
+  // QUAN TRỌNG (khác với bản gốc): mỗi HÀNG ảnh phải đóng gói ĐỆM TRÒN
+  // BYTE - tức số byte/hàng = ceil(W/8), KHÔNG PHẢI W/8 (phẳng, không
+  // đệm). Với màn 4.2" (400) 2 cách này cho ra kết quả giống hệt nhau vì
+  // 400 vốn đã chia hết 8. Nhưng với màn 2.13" (212) thì 212/8=26.5 -
+  // không phải số nguyên; dùng W/8 làm bước nhảy khi ghi vào mảng khiến
+  // các hàng lẻ bị ghi lạc ra ngoài buffer (JS không báo lỗi, dữ liệu
+  // ảnh coi như mất một nửa). Firmware phía 212x104 (xem imgd_start()/
+  // imgd_chunk() trong user_custs1_impl.c) dùng ĐÚNG quy ước đệm tròn
+  // byte mỗi hàng - nên web PHẢI đóng gói khớp y hệt vậy.
   // ---------------------------------------------------------------
   const DEVICES = {
     "42": {
@@ -517,7 +527,8 @@
   let currentDevice = DEVICES["42"];
   // Các biến này được cập nhật lại mỗi khi đổi thiết bị (xem applyDevice())
   let IMG_W = currentDevice.W, IMG_H = currentDevice.H;
-  let IMG_PLANE_LEN = (IMG_W*IMG_H)/8;
+  let IMG_LINE_BYTES = Math.ceil(IMG_W/8);              // số byte/hàng, ĐỆM TRÒN BYTE
+  let IMG_PLANE_LEN = IMG_LINE_BYTES*IMG_H;               // 1 lớp (đen/trắng hoặc đỏ)
   let IMG_DATA_LEN = currentDevice.hasRed ? IMG_PLANE_LEN*2 : IMG_PLANE_LEN;
   const IMG_CHUNK_SIZE = 128;
 
@@ -569,7 +580,8 @@
     currentDevice = DEVICES[key];
     IMG_W = currentDevice.W;
     IMG_H = currentDevice.H;
-    IMG_PLANE_LEN = (IMG_W*IMG_H)/8;
+    IMG_LINE_BYTES = Math.ceil(IMG_W/8);
+    IMG_PLANE_LEN = IMG_LINE_BYTES*IMG_H;
     IMG_DATA_LEN = currentDevice.hasRed ? IMG_PLANE_LEN*2 : IMG_PLANE_LEN;
 
     $("canvasOrig").width = IMG_W; $("canvasOrig").height = IMG_H;
@@ -1045,14 +1057,20 @@
     }
 
     // Đóng gói: màn có đỏ thì 2 lớp (đen-trắng + đỏ) nối liền nhau;
-    // màn đen-trắng thuần chỉ có đúng 1 lớp.
+    // màn đen-trắng thuần chỉ có đúng 1 lớp. MỖI HÀNG ĐỆM TRÒN BYTE
+    // (IMG_LINE_BYTES = ceil(IMG_W/8) byte/hàng) - khớp ĐÚNG quy ước
+    // imgd_start()/imgd_chunk() bên firmware. Với chiều rộng không chia
+    // hết 8 (VD 212), vài bit cuối mỗi hàng KHÔNG dùng tới - để mặc định
+    // 0, firmware tự bỏ qua các bit thừa này (xem "if(x>=imgd_w) continue"
+    // trong imgd_chunk()) nên giá trị đệm không ảnh hưởng gì tới ảnh hiện.
     const bwPlane = new Uint8Array(IMG_PLANE_LEN);
     const redPlane = currentDevice.hasRed ? new Uint8Array(IMG_PLANE_LEN) : null;
     for(let y=0; y<IMG_H; y++){
-      for(let xByte=0; xByte<IMG_W/8; xByte++){
+      for(let xByte=0; xByte<IMG_LINE_BYTES; xByte++){
         let bwByte = 0, redByte = 0;
         for(let b=0; b<8; b++){
           const x = xByte*8+b;
+          if(x>=IMG_W) continue; // bit đệm cuối hàng - bỏ qua, không đọc lạc sang hàng kế
           const c = classify[y*IMG_W+x];
           const bwBit = (c===1) ? 0 : 1;
           bwByte |= (bwBit<<(7-b));
@@ -1061,8 +1079,8 @@
             redByte |= (redBit<<(7-b));
           }
         }
-        bwPlane[y*(IMG_W/8)+xByte] = bwByte;
-        if(redPlane){ redPlane[y*(IMG_W/8)+xByte] = redByte; }
+        bwPlane[y*IMG_LINE_BYTES+xByte] = bwByte;
+        if(redPlane){ redPlane[y*IMG_LINE_BYTES+xByte] = redByte; }
       }
     }
     const packed = new Uint8Array(IMG_DATA_LEN);
