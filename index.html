@@ -546,6 +546,14 @@
 
   let device = null, gattServer = null, longValChar = null, adcChar = null;
   let packedImage = null;
+  // Thời điểm (ms, Date.now()) hoàn tất lần gửi ảnh GẦN NHẤT - dùng để tự
+  // chờ đủ lâu trước khi cho phép gửi ảnh TIẾP THEO. Firmware không còn tự
+  // chờ nữa (chờ chặn lâu trên firmware nhúng có rủi ro treo/reset qua
+  // watchdog) - trách nhiệm chờ chuyển hẳn sang đây, nơi hoàn toàn an toàn.
+  let lastImageSentAt = 0;
+  // Thời gian tối thiểu (ms) giữa 2 lần BẮT ĐẦU gửi ảnh, đủ cho 1 lần
+  // full-refresh UPDATE_FULL (đo thực tế có lúc >3s) hoàn tất trên panel.
+  const IMAGE_COOLDOWN_MS = 6000;
   let lastLoadedImg = null;
 
   // ---------------------------------------------------------------
@@ -1205,6 +1213,19 @@
     if(!packedImage){ log("Chưa có ảnh để gửi.", "err"); return; }
     if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
 
+    // Chờ đủ lâu để màn hình vật lý làm mới xong hoàn toàn từ lần gửi
+    // TRƯỚC, trước khi bắt đầu phiên mới. Firmware giờ TỪ CHỐI NGAY (không
+    // chờ) nếu vẫn đang bận vẽ - nên phải tự đảm bảo đủ thời gian ở đây,
+    // nếu không ảnh gửi lên sẽ bị bỏ qua âm thầm (web tưởng thành công vì
+    // toàn bộ byte vẫn gửi được qua Bluetooth bình thường, chỉ là firmware
+    // không vẽ gì cả).
+    const elapsed = Date.now() - lastImageSentAt;
+    if(lastImageSentAt>0 && elapsed < IMAGE_COOLDOWN_MS){
+      const remain = IMAGE_COOLDOWN_MS - elapsed;
+      log(`Đang chờ ${(remain/1000).toFixed(1)}s để màn hình làm mới xong lần trước...`);
+      await sleep(remain);
+    }
+
     $("btnSend").disabled = true;
     $("sendProgress").style.display = "block";
     $("sendProgress").value = 0;
@@ -1256,34 +1277,10 @@
       }
 
       log(`Đã gửi xong toàn bộ ${totalChunks} gói. Thiết bị đang hiển thị ảnh…`, "ok");
-
-      // CHẨN ĐOÁN (không cần UART): đọc lại chính characteristic vừa ghi -
-      // firmware đã tự "bơm" checksum nó thực sự nhận được vào đó ngay
-      // sau khi xong (xem imgd_chunk() trong user_custs1_impl.c). Đợi 1
-      // chút cho chắc firmware xử lý xong trước khi đọc.
-      try{
-        await sleep(200);
-        const readBuf = await longValChar.readValue();
-        if(readBuf.byteLength>=11 && readBuf.getUint8(0)===0x99){
-          const fwChecksum  = readBuf.getUint32(1, true);
-          const fwTotalLen  = readBuf.getUint32(5, true);
-          const fwChunks    = readBuf.getUint16(9, true);
-          const fwChecksumHex = fwChecksum.toString(16).padStart(8,'0');
-          const webChecksumHex = checksum.toString(16).padStart(8,'0');
-          log(`Firmware báo đã nhận: ${fwTotalLen} byte, ${fwChunks} gói, checksum=${fwChecksumHex}`);
-          if(fwTotalLen !== IMG_DATA_LEN){
-            log(`⚠️ SAI SỐ LƯỢNG BYTE: web gửi ${IMG_DATA_LEN}, firmware nhận ${fwTotalLen} - có gói bị rớt/thiếu.`, "err");
-          }else if(fwChecksumHex === webChecksumHex){
-            log(`✅ Checksum KHỚP (${webChecksumHex}) - byte nhận đúng 100% qua Bluetooth. Lỗi (nếu ảnh vẫn nhiễu) chắc chắn nằm ở khâu VẼ trong firmware, không phải do truyền BLE.`, "ok");
-          }else{
-            log(`❌ Checksum KHÁC NHAU: web=${webChecksumHex}, firmware=${fwChecksumHex} - dữ liệu bị sai ngay khi truyền qua Bluetooth.`, "err");
-          }
-        }else{
-          log("Không đọc được checksum chẩn đoán từ firmware (firmware có thể là bản cũ chưa có tính năng này).", "err");
-        }
-      }catch(diagErr){
-        log("Không đọc lại được checksum từ firmware: " + diagErr.message, "err");
-      }
+      // Ghi lại mốc thời gian hoàn tất - sendImage() lần SAU sẽ tự chờ đủ
+      // IMAGE_COOLDOWN_MS kể từ đây trước khi bắt đầu, cho màn hình vật lý
+      // đủ thời gian làm mới xong (xem đầu hàm sendImage()).
+      lastImageSentAt = Date.now();
     }catch(err){
       log("Lỗi khi gửi ảnh: " + err.message, "err");
     }finally{
