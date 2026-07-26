@@ -1431,6 +1431,14 @@
     { value: 7, label: "Ngày (số)" },
     { value: 8, label: "Tháng (số)" },
   ];
+  // Font 1 và 3 là font "7 đoạn" CHỈ CÓ CHỮ SỐ (dùng cho hiển thị giờ lớn
+  // kiểu đồng hồ điện tử) - không có dấu ":" "/" hay chữ tiếng Việt có dấu.
+  // Chọn nhầm nội dung có ký tự không có trong font này từng gây crash
+  // firmware thật (đã sửa ở firmware, nhưng vẫn lọc luôn ở đây cho chắc -
+  // 2 lớp bảo vệ tốt hơn 1) - chỉ 6/7/8 (Năm/Ngày/Tháng dạng số thuần) là
+  // an toàn với font 7 đoạn.
+  const LAYOUT_BIND_NUMERIC_ONLY = [6, 7, 8];
+  function isSevenSegmentFont(font){ return font===1 || font===3; }
 
   // Mỗi phần tử: {type, x, y, font, color, bind, w, h} - x/y/w/h theo ĐÚNG
   // pixel thiết bị thật (0-255), không phải pixel màn hình máy tính.
@@ -1573,19 +1581,29 @@
     panel.style.display = "flex";
 
     if(el.type===1){
+      // Nếu đang chọn font 7 đoạn nhưng nội dung hiện tại có ký tự font
+      // đó không có (":" "/" hoặc chữ có dấu) - tự đổi về nội dung an
+      // toàn gần nhất, tránh gửi xuống tổ hợp có thể gây lỗi hiển thị.
+      if(isSevenSegmentFont(el.font) && !LAYOUT_BIND_NUMERIC_ONLY.includes(el.bind)){
+        el.bind = LAYOUT_BIND_NUMERIC_ONLY[0];
+      }
+      const bindOptions = isSevenSegmentFont(el.font)
+        ? LAYOUT_BINDS.filter(o => LAYOUT_BIND_NUMERIC_ONLY.includes(o.value))
+        : LAYOUT_BINDS;
       panel.innerHTML = `
         <label class="lf">Cỡ chữ
           <select id="propFont">${layoutOptionsHtml(LAYOUT_FONTS, el.font)}</select>
         </label>
         <label class="lf">Nội dung
-          <select id="propBind">${layoutOptionsHtml(LAYOUT_BINDS, el.bind)}</select>
+          <select id="propBind">${layoutOptionsHtml(bindOptions, el.bind)}</select>
         </label>
+        ${isSevenSegmentFont(el.font) ? '<span style="font-size:10px; color:var(--ink-faint); max-width:140px;">Font 7 đoạn chỉ có chữ số - đã lọc bớt lựa chọn không tương thích.</span>' : ''}
         <label class="lf">Màu
           <select id="propColor">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select>
         </label>
         <button class="btnDel small">Xoá phần tử</button>
       `;
-      $("propFont").addEventListener("change", (e) => { el.font = parseInt(e.target.value,10); renderLayoutStage(); });
+      $("propFont").addEventListener("change", (e) => { el.font = parseInt(e.target.value,10); renderLayoutProps(); renderLayoutStage(); });
       $("propBind").addEventListener("change", (e) => { el.bind = parseInt(e.target.value,10); renderLayoutStage(); });
     }else{
       panel.innerHTML = `
