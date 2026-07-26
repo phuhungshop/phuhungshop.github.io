@@ -231,23 +231,56 @@
   }
   .cal-row label{ font-size:12px; color:var(--ink-soft); }
 
-  /* ---------- Layout element editor ---------- */
-  .layout-row{
-    display:flex; flex-wrap:wrap; gap:8px; align-items:center;
-    border:1px solid var(--rule); border-radius:8px; padding:10px 12px;
-    background:#fff;
+  /* ---------- Layout designer - kéo thả trực quan ---------- */
+  .layout-toolbar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .layout-size-prompt{
+    display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;
+    background:#fff; border:1px solid var(--rule); border-radius:8px;
+    padding:10px 12px; margin-bottom:12px;
   }
-  .layout-row select, .layout-row input[type=number]{
+  .layout-size-prompt input{
+    font-family:var(--font-mono); font-size:12px; width:60px;
+    border:1px solid var(--rule); border-radius:6px; padding:6px 7px;
+  }
+  .lf{ display:flex; flex-direction:column; gap:2px; font-size:10px; color:var(--ink-faint); }
+  button.small{ padding:6px 11px; font-size:11.5px; }
+
+  #layoutStageWrap{
+    background:#d9d4c6; border-radius:10px; padding:16px;
+    display:flex; justify-content:center; overflow-x:auto;
+  }
+  #layoutStage{
+    position:relative; background:#fff; box-shadow:0 2px 10px rgba(30,26,15,0.25);
+    flex-shrink:0; touch-action:none;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.05) 0 1px, transparent 1px 20px),
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0 1px, transparent 1px 20px);
+  }
+  .layout-el{
+    position:absolute; cursor:grab; user-select:none; touch-action:none;
+    border:1px dashed transparent;
+    display:flex; align-items:center; justify-content:center;
+    white-space:nowrap; font-family:var(--font-mono);
+  }
+  .layout-el:hover{ border-color:var(--stamp-green); }
+  .layout-el.selected{ border:1px solid var(--stamp-green); border-style:solid; box-shadow:0 0 0 2px rgba(47,95,74,0.2); }
+  .layout-el.dragging{ cursor:grabbing; opacity:0.85; z-index:10; }
+  .layout-el.el-text{ padding:1px 2px; }
+  .layout-el.el-box-solid{ background:var(--el-color, #111); }
+  .layout-el.el-box-outline{ border-width:1.5px; border-color:var(--el-color, #111); border-style:solid; background:transparent; }
+
+  .layout-props{
+    background:#fff; border:1px solid var(--rule); border-radius:8px;
+    padding:12px 14px; margin-top:12px;
+    display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;
+  }
+  .layout-props select, .layout-props input[type=number]{
     font-family:var(--font-mono); font-size:12px;
-    border:1px solid var(--rule); border-radius:6px;
-    padding:6px 7px; background:#fff; color:var(--ink);
+    border:1px solid var(--rule); border-radius:6px; padding:6px 7px;
   }
-  .layout-row input[type=number]{ width:56px; }
-  .layout-row .lf{ display:flex; flex-direction:column; gap:2px; font-size:10px; color:var(--ink-faint); }
-  .layout-row .lf-grow{ flex:1 1 auto; min-width:110px; }
-  .layout-row .btnDel{
-    margin-left:auto; padding:6px 10px; font-size:11.5px;
-    background:transparent; color:var(--stamp-rust); border-color:var(--stamp-rust);
+  .layout-props input[type=number]{ width:56px; }
+  .layout-props .btnDel{
+    margin-left:auto; background:transparent; color:var(--stamp-rust); border-color:var(--stamp-rust);
   }
 
 
@@ -499,21 +532,30 @@
   <!-- Custom layout designer (TEST) -->
   <section class="card">
     <h2><span class="idx">06</span> Giao diện tuỳ chỉnh (đang test)</h2>
-    <p class="desc">Tự sắp xếp phần tử (chữ động giờ/ngày/âm lịch, hình chữ nhật) rồi gửi thẳng xuống thiết bị qua Bluetooth (lệnh <code>0x98</code>/<code>0x99</code>). Đồng hồ tự vẽ lại mỗi phút bằng giờ THẬT, không phải ảnh tĩnh. Hiện chỉ firmware 2.13" 212×104 đã có tính năng này.</p>
+    <p class="desc">Bấm "+Thêm" để tạo phần tử, kéo-thả trực tiếp trên khung màn hình bên dưới để đặt vị trí. Bấm vào 1 phần tử để chỉnh nội dung/cỡ chữ/màu hoặc xoá. Đồng hồ tự vẽ lại mỗi phút bằng giờ THẬT, không phải ảnh tĩnh. Hiện chỉ firmware 2.13" 212×104 đã có tính năng này.</p>
 
-    <div class="preview-box" style="margin-bottom:14px;">
-      <div class="cap">Xem trước (gần đúng - font/khoảng cách thật trên thiết bị có thể lệch chút)</div>
-      <canvas id="layoutPreviewCanvas" style="width:100%; max-width:424px; height:auto; background:#fff; border:1px solid var(--rule); border-radius:4px; image-rendering:pixelated;"></canvas>
+    <div class="layout-toolbar">
+      <button id="btnAddText" class="secondary">+ Thêm chữ</button>
+      <button id="btnAddBox" class="secondary">+ Thêm khung/lịch</button>
+      <span id="layoutCountLabel" style="font-size:11.5px; color:var(--ink-faint); margin-left:auto;">0/8 phần tử</span>
     </div>
 
-    <div id="layoutList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;"></div>
-
-    <div class="connect-row" style="margin-bottom:14px;">
-      <button id="btnLayoutAdd" class="secondary">+ Thêm phần tử</button>
-      <span id="layoutCountLabel" style="font-size:11.5px; color:var(--ink-faint);">0/20 phần tử</span>
+    <div id="layoutBoxSizePrompt" class="layout-size-prompt" style="display:none;">
+      <span style="font-size:11.5px; color:var(--ink-soft);">Kích thước khung (px thiết bị):</span>
+      <label class="lf">Rộng <input type="number" id="boxSizeW" min="4" max="255" value="60"></label>
+      <label class="lf">Cao <input type="number" id="boxSizeH" min="4" max="255" value="30"></label>
+      <button id="btnBoxSizeOk" class="small">Tạo & kéo vào khung</button>
+      <button id="btnBoxSizeCancel" class="secondary small">Huỷ</button>
     </div>
 
-    <div class="connect-row">
+    <div id="layoutStageWrap">
+      <div id="layoutStage"></div>
+    </div>
+    <p style="font-size:10.5px; color:var(--ink-faint); margin:6px 0 0;">Khung xem trước phóng to - font/khoảng cách thật trên thiết bị có thể lệch chút so với web.</p>
+
+    <div id="layoutPropsPanel" class="layout-props" style="display:none;"></div>
+
+    <div class="connect-row" style="margin-top:14px;">
       <button id="btnLayoutSend" class="wide" disabled>Gửi layout xuống thiết bị</button>
     </div>
     <progress id="layoutProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
@@ -676,7 +718,7 @@
     log(`Đã chọn màn ${currentDevice.label} (${IMG_W}×${IMG_H}${currentDevice.hasRed?", 3 màu":", đen-trắng"}).`);
 
     if(lastLoadedImg){ processImage(lastLoadedImg); }
-    if(typeof renderLayoutPreview === "function"){ renderLayoutPreview(); }
+    if(typeof renderLayoutStage === "function"){ renderLayoutStage(); }
   }
   document.querySelectorAll('input[name=deviceType]').forEach((el) => {
     el.addEventListener("change", (e) => applyDevice(e.target.value));
@@ -1341,28 +1383,26 @@
   }
 
   // =================================================================
-  // GIAO DIỆN TUỲ CHỈNH THEO LAYOUT (đang test)
+  // GIAO DIỆN TUỲ CHỈNH THEO LAYOUT (đang test) - kéo thả trực quan
   // Khớp ĐÚNG định dạng 8 byte/phần tử trong layout_start()/layout_chunk()
   // của firmware (user_custs1_impl.c, dự án 2.13" 212×104):
   //   [type, x, y, font, color, bind, w, h]
   // type: 1=chữ động, 2=hình chữ nhật đặc, 3=hình chữ nhật viền
   // Lệnh 0x98 (bắt đầu, gửi số lượng phần tử) + 0x99 (từng gói dữ liệu) -
   // dùng lại nguyên xi cơ chế truyền gói nhỏ đã ổn định của tính năng ảnh.
+  //
+  // Đã giảm từ 20 xuống 8 phần tử tối đa để khớp firmware (RAM board 212
+  // rất sát giới hạn - xem user_custs1_impl.c).
   // =================================================================
-  const LAYOUT_MAX_ELEMENTS = 20;
+  const LAYOUT_MAX_ELEMENTS = 8;
   const LAYOUT_ELEM_SIZE = 8;
   const LAYOUT_CHUNK_SIZE = 17;
 
-  const LAYOUT_TYPES = [
-    { value: 1, label: "Chữ động (giờ/ngày/âm lịch thật)" },
-    { value: 2, label: "Hình chữ nhật ĐẶC" },
-    { value: 3, label: "Hình chữ nhật VIỀN" },
-  ];
   const LAYOUT_FONTS = [
-    { value: 0, label: "0 - nhỏ" },
-    { value: 1, label: "1 - 7 đoạn vừa" },
-    { value: 2, label: "2 - lớn" },
-    { value: 3, label: "3 - 7 đoạn to" },
+    { value: 0, label: "Nhỏ" },
+    { value: 1, label: "7 đoạn vừa" },
+    { value: 2, label: "Lớn" },
+    { value: 3, label: "7 đoạn to" },
   ];
   const LAYOUT_COLORS = [
     { value: 0, label: "Đen" },
@@ -1370,8 +1410,8 @@
     { value: 2, label: "Đỏ" },
   ];
   const LAYOUT_BINDS = [
-    { value: 0, label: "HH:MM" },
-    { value: 1, label: "HH:MM:SS" },
+    { value: 0, label: "Giờ:Phút (HH:MM)" },
+    { value: 1, label: "Giờ:Phút:Giây" },
     { value: 2, label: "Ngày/Tháng" },
     { value: 3, label: "Ngày/Tháng/Năm" },
     { value: 4, label: "Tên Thứ" },
@@ -1381,92 +1421,27 @@
     { value: 8, label: "Tháng (số)" },
   ];
 
-  // Mỗi phần tử: {type, x, y, font, color, bind, w, h}
+  // Mỗi phần tử: {type, x, y, font, color, bind, w, h} - x/y/w/h theo ĐÚNG
+  // pixel thiết bị thật (0-255), không phải pixel màn hình máy tính.
   let layoutElements = [
     { type:1, x:4, y:4, font:2, color:0, bind:0, w:0, h:0 },
     { type:1, x:4, y:40, font:0, color:0, bind:3, w:0, h:0 },
   ];
+  let layoutSelected = -1; // chỉ số phần tử đang chọn, -1 = chưa chọn gì
 
-  function layoutOptionsHtml(opts, selected){
-    return opts.map(o => `<option value="${o.value}"${o.value===selected?" selected":""}>${o.label}</option>`).join("");
+  // Độ phóng to khung thiết kế (px web / px thiết bị) - màn càng nhỏ thì
+  // phóng càng to để dễ kéo-thả bằng ngón tay/chuột.
+  function layoutZoom(){
+    if(IMG_W<=130) return 4;
+    if(IMG_W<=260) return 3;
+    return 2;
   }
 
-  function renderLayoutList(){
-    const container = $("layoutList");
-    container.innerHTML = "";
-    layoutElements.forEach((el, idx) => {
-      const row = document.createElement("div");
-      row.className = "layout-row";
-      row.innerHTML = `
-        <label class="lf lf-grow">Loại
-          <select data-f="type" data-i="${idx}">${layoutOptionsHtml(LAYOUT_TYPES, el.type)}</select>
-        </label>
-        <label class="lf">X <input type="number" min="0" max="255" value="${el.x}" data-f="x" data-i="${idx}"></label>
-        <label class="lf">Y <input type="number" min="0" max="255" value="${el.y}" data-f="y" data-i="${idx}"></label>
-        ${el.type===1 ? `
-        <label class="lf lf-grow">Font
-          <select data-f="font" data-i="${idx}">${layoutOptionsHtml(LAYOUT_FONTS, el.font)}</select>
-        </label>
-        <label class="lf lf-grow">Nội dung
-          <select data-f="bind" data-i="${idx}">${layoutOptionsHtml(LAYOUT_BINDS, el.bind)}</select>
-        </label>
-        ` : `
-        <label class="lf">Rộng <input type="number" min="0" max="255" value="${el.w}" data-f="w" data-i="${idx}"></label>
-        <label class="lf">Cao <input type="number" min="0" max="255" value="${el.h}" data-f="h" data-i="${idx}"></label>
-        `}
-        <label class="lf lf-grow">Màu
-          <select data-f="color" data-i="${idx}">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select>
-        </label>
-        <button class="btnDel" data-i="${idx}">Xoá</button>
-      `;
-      container.appendChild(row);
-    });
+  function layoutClamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
-    container.querySelectorAll("select,input").forEach((el) => {
-      el.addEventListener("change", (e) => {
-        const i = parseInt(e.target.dataset.i, 10);
-        const f = e.target.dataset.f;
-        let v = parseInt(e.target.value, 10);
-        if(isNaN(v)) v = 0;
-        layoutElements[i][f] = v;
-        if(f==="type"){ renderLayoutList(); } // đổi loại -> đổi luôn bộ điều khiển hiển thị (font/nội dung vs rộng/cao)
-        renderLayoutPreview();
-      });
-    });
-    container.querySelectorAll(".btnDel").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        const i = parseInt(e.target.dataset.i, 10);
-        layoutElements.splice(i, 1);
-        renderLayoutList();
-        renderLayoutPreview();
-        updateLayoutCountLabel();
-      });
-    });
-
-    updateLayoutCountLabel();
-  }
-
-  function updateLayoutCountLabel(){
-    $("layoutCountLabel").textContent = `${layoutElements.length}/${LAYOUT_MAX_ELEMENTS} phần tử`;
-    $("btnLayoutAdd").disabled = layoutElements.length >= LAYOUT_MAX_ELEMENTS;
-    updateLayoutSendBtn();
-  }
-
-  function updateLayoutSendBtn(){
-    $("btnLayoutSend").disabled = !(device && device.gatt && device.gatt.connected && layoutElements.length>0);
-  }
-
-  $("btnLayoutAdd").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS) return;
-    layoutElements.push({ type:1, x:4, y:4, font:0, color:0, bind:0, w:20, h:10 });
-    renderLayoutList();
-    renderLayoutPreview();
-  });
-
-  // Xem trước GẦN ĐÚNG - không dùng font thật của firmware (web không có
-  // sẵn font bitmap đó), chỉ vẽ khung/vị trí để hình dung bố cục. Nội
-  // dung chữ động lấy theo giờ THẬT của máy tính đang mở trang, không
-  // phải giờ thiết bị.
+  // Xem trước GẦN ĐÚNG nội dung chữ động - không dùng font thật của
+  // firmware (web không có sẵn font bitmap đó). Giờ lấy theo máy tính
+  // đang mở trang, không phải giờ thiết bị.
   function layoutBindPreviewText(bind){
     const now = new Date();
     const pad = (n) => String(n).padStart(2,"0");
@@ -1485,33 +1460,183 @@
     }
   }
 
-  function renderLayoutPreview(){
-    const canvas = $("layoutPreviewCanvas");
-    const W = IMG_W, H = IMG_H; // dùng đúng độ phân giải thiết bị đang chọn ở mục 04
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0,0,W,H);
+  const LAYOUT_FONT_PX = { 0:11, 1:15, 2:16, 3:22 }; // cỡ chữ web GẦN ĐÚNG cho từng font id
+  function layoutColorCss(c){ return c===0 ? "#111" : c===1 ? "#fff" : "#c81e1e"; }
 
-    const colorHex = (c) => c===0 ? "#111" : c===1 ? "#fff" : "#c81e1e";
+  // ---------------- Vẽ lại toàn bộ khung thiết kế (stage) ----------------
+  function renderLayoutStage(){
+    const zoom = layoutZoom();
+    const stage = $("layoutStage");
+    stage.style.width = (IMG_W*zoom)+"px";
+    stage.style.height = (IMG_H*zoom)+"px";
+    stage.innerHTML = "";
 
-    layoutElements.forEach((el) => {
+    layoutElements.forEach((el, idx) => {
+      const div = document.createElement("div");
+      div.className = "layout-el " + (el.type===1 ? "el-text" : el.type===2 ? "el-box-solid" : "el-box-outline");
+      if(idx===layoutSelected) div.classList.add("selected");
+      div.style.left = (el.x*zoom)+"px";
+      div.style.top  = (el.y*zoom)+"px";
+      div.style.setProperty("--el-color", layoutColorCss(el.color));
+
       if(el.type===1){
-        ctx.fillStyle = colorHex(el.color);
-        ctx.font = (el.font>=1 ? "bold " : "") + (el.font===2 ? "14px" : el.font===3 ? "16px" : "10px") + " monospace";
-        ctx.textBaseline = "top";
-        ctx.fillText(layoutBindPreviewText(el.bind), el.x, el.y);
-      }else if(el.type===2){
-        ctx.fillStyle = colorHex(el.color);
-        ctx.fillRect(el.x, el.y, el.w, el.h);
-      }else if(el.type===3){
-        ctx.strokeStyle = colorHex(el.color);
-        ctx.lineWidth = 1;
-        ctx.strokeRect(el.x+0.5, el.y+0.5, el.w, el.h);
+        div.textContent = layoutBindPreviewText(el.bind);
+        div.style.fontSize = (LAYOUT_FONT_PX[el.font]*zoom/3)+"px";
+        div.style.fontWeight = el.font>=1 ? "700" : "400";
+        div.style.color = layoutColorCss(el.color);
+        div.style.background = el.color===1 ? "#333" : "transparent"; // chữ trắng cần nền tối mới thấy trên web
+        div.style.padding = "1px 3px";
+      }else{
+        div.style.width = (el.w*zoom)+"px";
+        div.style.height = (el.h*zoom)+"px";
       }
+
+      div.addEventListener("pointerdown", (e) => layoutStartDrag(e, idx));
+      stage.appendChild(div);
+    });
+
+    $("layoutCountLabel").textContent = `${layoutElements.length}/${LAYOUT_MAX_ELEMENTS} phần tử`;
+    updateLayoutSendBtn();
+    renderLayoutProps();
+  }
+
+  // ---------------- Kéo-thả bằng Pointer Events (chuột + cảm ứng) ----------------
+  let layoutDrag = null; // {idx, startX, startY, elStartX, elStartY, moved}
+
+  function layoutStartDrag(e, idx){
+    e.preventDefault();
+    const zoom = layoutZoom();
+    layoutDrag = {
+      idx,
+      startX: e.clientX, startY: e.clientY,
+      elStartX: layoutElements[idx].x, elStartY: layoutElements[idx].y,
+      zoom, moved: false,
+    };
+    e.target.setPointerCapture(e.pointerId);
+    e.target.classList.add("dragging");
+    window.addEventListener("pointermove", layoutOnDrag);
+    window.addEventListener("pointerup", layoutEndDrag);
+  }
+
+  function layoutOnDrag(e){
+    if(!layoutDrag) return;
+    const dxPx = e.clientX - layoutDrag.startX;
+    const dyPx = e.clientY - layoutDrag.startY;
+    if(Math.abs(dxPx)>2 || Math.abs(dyPx)>2) layoutDrag.moved = true;
+
+    const el = layoutElements[layoutDrag.idx];
+    const dxDev = Math.round(dxPx/layoutDrag.zoom);
+    const dyDev = Math.round(dyPx/layoutDrag.zoom);
+    const maxX = Math.max(0, IMG_W - (el.type===1 ? 8 : el.w));
+    const maxY = Math.max(0, IMG_H - (el.type===1 ? 8 : el.h));
+    el.x = layoutClamp(layoutDrag.elStartX+dxDev, 0, maxX);
+    el.y = layoutClamp(layoutDrag.elStartY+dyDev, 0, maxY);
+    renderLayoutStage();
+  }
+
+  function layoutEndDrag(e){
+    if(!layoutDrag) return;
+    const idx = layoutDrag.idx, moved = layoutDrag.moved;
+    window.removeEventListener("pointermove", layoutOnDrag);
+    window.removeEventListener("pointerup", layoutEndDrag);
+    layoutDrag = null;
+    // Chỉ coi là "chọn" nếu không kéo đi đâu cả (bấm đơn thuần) - kéo thả
+    // xong vẫn chọn luôn phần tử đó để tiện chỉnh tiếp.
+    layoutSelected = idx;
+    renderLayoutStage();
+  }
+
+  // ---------------- Bảng thuộc tính của phần tử đang chọn ----------------
+  function layoutOptionsHtml(opts, selected){
+    return opts.map(o => `<option value="${o.value}"${o.value===selected?" selected":""}>${o.label}</option>`).join("");
+  }
+
+  function renderLayoutProps(){
+    const panel = $("layoutPropsPanel");
+    if(layoutSelected<0 || !layoutElements[layoutSelected]){
+      panel.style.display = "none";
+      panel.innerHTML = "";
+      return;
+    }
+    const el = layoutElements[layoutSelected];
+    panel.style.display = "flex";
+
+    if(el.type===1){
+      panel.innerHTML = `
+        <label class="lf">Cỡ chữ
+          <select id="propFont">${layoutOptionsHtml(LAYOUT_FONTS, el.font)}</select>
+        </label>
+        <label class="lf">Nội dung
+          <select id="propBind">${layoutOptionsHtml(LAYOUT_BINDS, el.bind)}</select>
+        </label>
+        <label class="lf">Màu
+          <select id="propColor">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select>
+        </label>
+        <button class="btnDel small">Xoá phần tử</button>
+      `;
+      $("propFont").addEventListener("change", (e) => { el.font = parseInt(e.target.value,10); renderLayoutStage(); });
+      $("propBind").addEventListener("change", (e) => { el.bind = parseInt(e.target.value,10); renderLayoutStage(); });
+    }else{
+      panel.innerHTML = `
+        <label class="lf">Loại
+          <select id="propType">
+            <option value="2"${el.type===2?" selected":""}>Khung đặc</option>
+            <option value="3"${el.type===3?" selected":""}>Khung viền</option>
+          </select>
+        </label>
+        <label class="lf">Rộng <input type="number" id="propW" min="4" max="255" value="${el.w}"></label>
+        <label class="lf">Cao <input type="number" id="propH" min="4" max="255" value="${el.h}"></label>
+        <label class="lf">Màu
+          <select id="propColor">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select>
+        </label>
+        <button class="btnDel small">Xoá phần tử</button>
+      `;
+      $("propType").addEventListener("change", (e) => { el.type = parseInt(e.target.value,10); renderLayoutStage(); });
+      $("propW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||1,1,255); renderLayoutStage(); });
+      $("propH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||1,1,255); renderLayoutStage(); });
+    }
+    $("propColor").addEventListener("change", (e) => { el.color = parseInt(e.target.value,10); renderLayoutStage(); });
+    panel.querySelector(".btnDel").addEventListener("click", () => {
+      layoutElements.splice(layoutSelected, 1);
+      layoutSelected = -1;
+      renderLayoutStage();
     });
   }
 
+  // Bấm khoảng trống trong khung (không trúng phần tử nào) -> bỏ chọn
+  $("layoutStage").addEventListener("pointerdown", (e) => {
+    if(e.target.id==="layoutStage"){ layoutSelected = -1; renderLayoutStage(); }
+  });
+
+  // ---------------- Thêm phần tử ----------------
+  $("btnAddText").addEventListener("click", () => {
+    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log("Đã đạt tối đa 8 phần tử.", "err"); return; }
+    layoutElements.push({ type:1, x:4, y:4, font:2, color:0, bind:0, w:0, h:0 });
+    layoutSelected = layoutElements.length-1;
+    renderLayoutStage();
+  });
+
+  $("btnAddBox").addEventListener("click", () => {
+    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log("Đã đạt tối đa 8 phần tử.", "err"); return; }
+    $("layoutBoxSizePrompt").style.display = "flex";
+  });
+  $("btnBoxSizeCancel").addEventListener("click", () => {
+    $("layoutBoxSizePrompt").style.display = "none";
+  });
+  $("btnBoxSizeOk").addEventListener("click", () => {
+    const w = layoutClamp(parseInt($("boxSizeW").value,10)||20, 4, 255);
+    const h = layoutClamp(parseInt($("boxSizeH").value,10)||20, 4, 255);
+    layoutElements.push({ type:2, x:4, y:4, font:0, color:0, bind:0, w, h });
+    layoutSelected = layoutElements.length-1;
+    $("layoutBoxSizePrompt").style.display = "none";
+    renderLayoutStage();
+  });
+
+  function updateLayoutSendBtn(){
+    $("btnLayoutSend").disabled = !(device && device.gatt && device.gatt.connected && layoutElements.length>0);
+  }
+
+  // ---------------- Đóng gói + gửi ----------------
   function packLayoutElements(){
     const buf = new Uint8Array(layoutElements.length*LAYOUT_ELEM_SIZE);
     layoutElements.forEach((el, idx) => {
@@ -1571,9 +1696,8 @@
 
   $("btnLayoutSend").addEventListener("click", sendLayout);
 
-  renderLayoutList();
-  renderLayoutPreview();
-  setInterval(renderLayoutPreview, 1000); // cập nhật giờ:phút trong khung xem trước
+  renderLayoutStage();
+  setInterval(renderLayoutStage, 1000); // cập nhật giờ:phút trong khung xem trước
 
   // ---------------------------------------------------------------
   // Gắn sự kiện
