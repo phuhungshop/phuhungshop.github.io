@@ -231,6 +231,26 @@
   }
   .cal-row label{ font-size:12px; color:var(--ink-soft); }
 
+  /* ---------- Layout element editor ---------- */
+  .layout-row{
+    display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    border:1px solid var(--rule); border-radius:8px; padding:10px 12px;
+    background:#fff;
+  }
+  .layout-row select, .layout-row input[type=number]{
+    font-family:var(--font-mono); font-size:12px;
+    border:1px solid var(--rule); border-radius:6px;
+    padding:6px 7px; background:#fff; color:var(--ink);
+  }
+  .layout-row input[type=number]{ width:56px; }
+  .layout-row .lf{ display:flex; flex-direction:column; gap:2px; font-size:10px; color:var(--ink-faint); }
+  .layout-row .lf-grow{ flex:1 1 auto; min-width:110px; }
+  .layout-row .btnDel{
+    margin-left:auto; padding:6px 10px; font-size:11.5px;
+    background:transparent; color:var(--stamp-rust); border-color:var(--stamp-rust);
+  }
+
+
   /* ---------- Device picker ---------- */
   .device-picker{
     display:grid;
@@ -476,10 +496,33 @@
     </div>
   </section>
 
+  <!-- Custom layout designer (TEST) -->
+  <section class="card">
+    <h2><span class="idx">06</span> Giao diện tuỳ chỉnh (đang test)</h2>
+    <p class="desc">Tự sắp xếp phần tử (chữ động giờ/ngày/âm lịch, hình chữ nhật) rồi gửi thẳng xuống thiết bị qua Bluetooth (lệnh <code>0x98</code>/<code>0x99</code>). Đồng hồ tự vẽ lại mỗi phút bằng giờ THẬT, không phải ảnh tĩnh. Hiện chỉ firmware 2.13" 212×104 đã có tính năng này.</p>
+
+    <div class="preview-box" style="margin-bottom:14px;">
+      <div class="cap">Xem trước (gần đúng - font/khoảng cách thật trên thiết bị có thể lệch chút)</div>
+      <canvas id="layoutPreviewCanvas" style="width:100%; max-width:424px; height:auto; background:#fff; border:1px solid var(--rule); border-radius:4px; image-rendering:pixelated;"></canvas>
+    </div>
+
+    <div id="layoutList" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;"></div>
+
+    <div class="connect-row" style="margin-bottom:14px;">
+      <button id="btnLayoutAdd" class="secondary">+ Thêm phần tử</button>
+      <span id="layoutCountLabel" style="font-size:11.5px; color:var(--ink-faint);">0/20 phần tử</span>
+    </div>
+
+    <div class="connect-row">
+      <button id="btnLayoutSend" class="wide" disabled>Gửi layout xuống thiết bị</button>
+    </div>
+    <progress id="layoutProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
+  </section>
+
   <!-- Log -->
   <section class="card">
     <div class="log-head">
-      <h2 style="margin:0"><span class="idx">06</span> Nhật ký</h2>
+      <h2 style="margin:0"><span class="idx">07</span> Nhật ký</h2>
       <button class="secondary small" id="btnClearLog">Xoá nhật ký</button>
     </div>
     <div id="log">Đang chờ kết nối thiết bị…</div>
@@ -592,6 +635,7 @@
     $("btnMode").disabled = !connected;
     $("btnCal").disabled = !connected;
     updateSendBtn();
+    if(typeof updateLayoutSendBtn === "function"){ updateLayoutSendBtn(); }
     if(!connected){
       $("devName").textContent = "—";
       $("devVolt").textContent = "— V";
@@ -632,6 +676,7 @@
     log(`Đã chọn màn ${currentDevice.label} (${IMG_W}×${IMG_H}${currentDevice.hasRed?", 3 màu":", đen-trắng"}).`);
 
     if(lastLoadedImg){ processImage(lastLoadedImg); }
+    if(typeof renderLayoutPreview === "function"){ renderLayoutPreview(); }
   }
   document.querySelectorAll('input[name=deviceType]').forEach((el) => {
     el.addEventListener("change", (e) => applyDevice(e.target.value));
@@ -1294,6 +1339,241 @@
       updateSendBtn();
     }
   }
+
+  // =================================================================
+  // GIAO DIỆN TUỲ CHỈNH THEO LAYOUT (đang test)
+  // Khớp ĐÚNG định dạng 8 byte/phần tử trong layout_start()/layout_chunk()
+  // của firmware (user_custs1_impl.c, dự án 2.13" 212×104):
+  //   [type, x, y, font, color, bind, w, h]
+  // type: 1=chữ động, 2=hình chữ nhật đặc, 3=hình chữ nhật viền
+  // Lệnh 0x98 (bắt đầu, gửi số lượng phần tử) + 0x99 (từng gói dữ liệu) -
+  // dùng lại nguyên xi cơ chế truyền gói nhỏ đã ổn định của tính năng ảnh.
+  // =================================================================
+  const LAYOUT_MAX_ELEMENTS = 20;
+  const LAYOUT_ELEM_SIZE = 8;
+  const LAYOUT_CHUNK_SIZE = 17;
+
+  const LAYOUT_TYPES = [
+    { value: 1, label: "Chữ động (giờ/ngày/âm lịch thật)" },
+    { value: 2, label: "Hình chữ nhật ĐẶC" },
+    { value: 3, label: "Hình chữ nhật VIỀN" },
+  ];
+  const LAYOUT_FONTS = [
+    { value: 0, label: "0 - nhỏ" },
+    { value: 1, label: "1 - 7 đoạn vừa" },
+    { value: 2, label: "2 - lớn" },
+    { value: 3, label: "3 - 7 đoạn to" },
+  ];
+  const LAYOUT_COLORS = [
+    { value: 0, label: "Đen" },
+    { value: 1, label: "Trắng" },
+    { value: 2, label: "Đỏ" },
+  ];
+  const LAYOUT_BINDS = [
+    { value: 0, label: "HH:MM" },
+    { value: 1, label: "HH:MM:SS" },
+    { value: 2, label: "Ngày/Tháng" },
+    { value: 3, label: "Ngày/Tháng/Năm" },
+    { value: 4, label: "Tên Thứ" },
+    { value: 5, label: "Âm lịch Ngày/Tháng" },
+    { value: 6, label: "Năm" },
+    { value: 7, label: "Ngày (số)" },
+    { value: 8, label: "Tháng (số)" },
+  ];
+
+  // Mỗi phần tử: {type, x, y, font, color, bind, w, h}
+  let layoutElements = [
+    { type:1, x:4, y:4, font:2, color:0, bind:0, w:0, h:0 },
+    { type:1, x:4, y:40, font:0, color:0, bind:3, w:0, h:0 },
+  ];
+
+  function layoutOptionsHtml(opts, selected){
+    return opts.map(o => `<option value="${o.value}"${o.value===selected?" selected":""}>${o.label}</option>`).join("");
+  }
+
+  function renderLayoutList(){
+    const container = $("layoutList");
+    container.innerHTML = "";
+    layoutElements.forEach((el, idx) => {
+      const row = document.createElement("div");
+      row.className = "layout-row";
+      row.innerHTML = `
+        <label class="lf lf-grow">Loại
+          <select data-f="type" data-i="${idx}">${layoutOptionsHtml(LAYOUT_TYPES, el.type)}</select>
+        </label>
+        <label class="lf">X <input type="number" min="0" max="255" value="${el.x}" data-f="x" data-i="${idx}"></label>
+        <label class="lf">Y <input type="number" min="0" max="255" value="${el.y}" data-f="y" data-i="${idx}"></label>
+        ${el.type===1 ? `
+        <label class="lf lf-grow">Font
+          <select data-f="font" data-i="${idx}">${layoutOptionsHtml(LAYOUT_FONTS, el.font)}</select>
+        </label>
+        <label class="lf lf-grow">Nội dung
+          <select data-f="bind" data-i="${idx}">${layoutOptionsHtml(LAYOUT_BINDS, el.bind)}</select>
+        </label>
+        ` : `
+        <label class="lf">Rộng <input type="number" min="0" max="255" value="${el.w}" data-f="w" data-i="${idx}"></label>
+        <label class="lf">Cao <input type="number" min="0" max="255" value="${el.h}" data-f="h" data-i="${idx}"></label>
+        `}
+        <label class="lf lf-grow">Màu
+          <select data-f="color" data-i="${idx}">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select>
+        </label>
+        <button class="btnDel" data-i="${idx}">Xoá</button>
+      `;
+      container.appendChild(row);
+    });
+
+    container.querySelectorAll("select,input").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        const i = parseInt(e.target.dataset.i, 10);
+        const f = e.target.dataset.f;
+        let v = parseInt(e.target.value, 10);
+        if(isNaN(v)) v = 0;
+        layoutElements[i][f] = v;
+        if(f==="type"){ renderLayoutList(); } // đổi loại -> đổi luôn bộ điều khiển hiển thị (font/nội dung vs rộng/cao)
+        renderLayoutPreview();
+      });
+    });
+    container.querySelectorAll(".btnDel").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const i = parseInt(e.target.dataset.i, 10);
+        layoutElements.splice(i, 1);
+        renderLayoutList();
+        renderLayoutPreview();
+        updateLayoutCountLabel();
+      });
+    });
+
+    updateLayoutCountLabel();
+  }
+
+  function updateLayoutCountLabel(){
+    $("layoutCountLabel").textContent = `${layoutElements.length}/${LAYOUT_MAX_ELEMENTS} phần tử`;
+    $("btnLayoutAdd").disabled = layoutElements.length >= LAYOUT_MAX_ELEMENTS;
+    updateLayoutSendBtn();
+  }
+
+  function updateLayoutSendBtn(){
+    $("btnLayoutSend").disabled = !(device && device.gatt && device.gatt.connected && layoutElements.length>0);
+  }
+
+  $("btnLayoutAdd").addEventListener("click", () => {
+    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS) return;
+    layoutElements.push({ type:1, x:4, y:4, font:0, color:0, bind:0, w:20, h:10 });
+    renderLayoutList();
+    renderLayoutPreview();
+  });
+
+  // Xem trước GẦN ĐÚNG - không dùng font thật của firmware (web không có
+  // sẵn font bitmap đó), chỉ vẽ khung/vị trí để hình dung bố cục. Nội
+  // dung chữ động lấy theo giờ THẬT của máy tính đang mở trang, không
+  // phải giờ thiết bị.
+  function layoutBindPreviewText(bind){
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2,"0");
+    const wdayFull = ["Chủ nhật","Thứ hai","Thứ ba","Thứ tư","Thứ năm","Thứ sáu","Thứ bảy"][now.getDay()];
+    switch(bind){
+      case 0: return `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      case 1: return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      case 2: return `${pad(now.getDate())}/${pad(now.getMonth()+1)}`;
+      case 3: return `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`;
+      case 4: return wdayFull;
+      case 5: return `${pad(now.getDate())}/${pad(now.getMonth()+1)} (âm)`;
+      case 6: return `${now.getFullYear()}`;
+      case 7: return `${pad(now.getDate())}`;
+      case 8: return `${pad(now.getMonth()+1)}`;
+      default: return "";
+    }
+  }
+
+  function renderLayoutPreview(){
+    const canvas = $("layoutPreviewCanvas");
+    const W = IMG_W, H = IMG_H; // dùng đúng độ phân giải thiết bị đang chọn ở mục 04
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0,0,W,H);
+
+    const colorHex = (c) => c===0 ? "#111" : c===1 ? "#fff" : "#c81e1e";
+
+    layoutElements.forEach((el) => {
+      if(el.type===1){
+        ctx.fillStyle = colorHex(el.color);
+        ctx.font = (el.font>=1 ? "bold " : "") + (el.font===2 ? "14px" : el.font===3 ? "16px" : "10px") + " monospace";
+        ctx.textBaseline = "top";
+        ctx.fillText(layoutBindPreviewText(el.bind), el.x, el.y);
+      }else if(el.type===2){
+        ctx.fillStyle = colorHex(el.color);
+        ctx.fillRect(el.x, el.y, el.w, el.h);
+      }else if(el.type===3){
+        ctx.strokeStyle = colorHex(el.color);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(el.x+0.5, el.y+0.5, el.w, el.h);
+      }
+    });
+  }
+
+  function packLayoutElements(){
+    const buf = new Uint8Array(layoutElements.length*LAYOUT_ELEM_SIZE);
+    layoutElements.forEach((el, idx) => {
+      const o = idx*LAYOUT_ELEM_SIZE;
+      buf[o+0] = el.type & 0xff;
+      buf[o+1] = el.x & 0xff;
+      buf[o+2] = el.y & 0xff;
+      buf[o+3] = el.font & 0xff;
+      buf[o+4] = el.color & 0xff;
+      buf[o+5] = el.bind & 0xff;
+      buf[o+6] = el.w & 0xff;
+      buf[o+7] = el.h & 0xff;
+    });
+    return buf;
+  }
+
+  async function sendLayout(){
+    if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
+    if(layoutElements.length===0){ log("Chưa có phần tử nào để gửi.", "err"); return; }
+
+    $("btnLayoutSend").disabled = true;
+    $("layoutProgress").style.display = "block";
+    $("layoutProgress").value = 0;
+
+    try{
+      const packed = packLayoutElements();
+      const count = layoutElements.length;
+
+      // Lệnh 0x98: [0x98, count] - khớp đúng layout_start() trong firmware
+      // (chỉ đọc val[1] làm số lượng phần tử, không cần gửi thêm gì khác).
+      await writeWithRetry(new Uint8Array([0x98, count]), 3);
+      log(`Đã gửi lệnh bắt đầu (0x98) - ${count} phần tử...`);
+
+      const totalChunks = Math.ceil(packed.length/LAYOUT_CHUNK_SIZE);
+      for(let i=0; i<totalChunks; i++){
+        const off = i*LAYOUT_CHUNK_SIZE;
+        const end = Math.min(off+LAYOUT_CHUNK_SIZE, packed.length);
+        const chunkData = packed.slice(off, end);
+        const buf = new Uint8Array(3+chunkData.length);
+        buf[0] = 0x99;
+        buf[1] = i & 0xff;
+        buf[2] = (i>>8) & 0xff;
+        buf.set(chunkData, 3);
+        await writeWithRetry(buf, 3);
+        await sleep(15);
+        $("layoutProgress").value = Math.round((i+1)/totalChunks*100);
+      }
+
+      log(`Đã gửi xong layout (${count} phần tử, ${totalChunks} gói). Thiết bị đang hiển thị…`, "ok");
+    }catch(err){
+      log("Lỗi khi gửi layout: " + err.message, "err");
+    }finally{
+      updateLayoutSendBtn();
+      $("layoutProgress").style.display = "none";
+    }
+  }
+
+  $("btnLayoutSend").addEventListener("click", sendLayout);
+
+  renderLayoutList();
+  renderLayoutPreview();
+  setInterval(renderLayoutPreview, 1000); // cập nhật giờ:phút trong khung xem trước
 
   // ---------------------------------------------------------------
   // Gắn sự kiện
