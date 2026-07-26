@@ -459,6 +459,10 @@
     </div>
 
     <div class="connect-row" style="margin-top:16px">
+      <button id="btnPrepare" class="secondary wide" disabled>Chuẩn bị gửi ảnh</button>
+    </div>
+    <p id="prepareStatus" class="text-[11px]" style="font-size:11px; color:var(--ink-faint); margin:6px 0 0;">Bấm "Chuẩn bị gửi ảnh" trước, đợi xong rồi mới bấm "Gửi ảnh" — giúp màn hình (đặc biệt bản 4.2") ổn định hơn, tránh gửi được lúc được lúc không.</p>
+    <div class="connect-row" style="margin-top:10px">
       <button id="btnSend" class="wide" disabled>Gửi ảnh lên màn hình</button>
     </div>
     <progress id="sendProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
@@ -529,6 +533,12 @@
       // tương ứng sẽ làm lệch hẳn phép tính chunk_index*IMGD_CHUNK_SIZE
       // bên firmware, hỏng luôn thiết bị này.
       chunkSize: 128,
+      // Thời gian chờ (ms) khi bấm nút "Chuẩn bị gửi ảnh". Bản 4.2" gửi
+      // 30.000 byte/lần (dữ liệu 3 màu, gấp ~7-10 lần 2 bản 2.13") nên
+      // full-refresh vật lý lâu hơn nhiều - cần chờ dư dả hơn hẳn để
+      // tránh gửi đè lên lúc màn còn đang bận (nguyên nhân "được lúc
+      // không" đã gặp).
+      prepWaitMs: 12000,
     },
     "213": {
       label: "2.13 inch (212×104)",
@@ -540,6 +550,7 @@
       // định từng gây nhiễu ảnh khi lên màn hình thật. PHẢI khớp đúng
       // con số này với firmware, không tự ý đổi một bên.
       chunkSize: 17,
+      prepWaitMs: 6000,
     },
     "250": {
       label: "2.13 inch (250×122)",
@@ -550,6 +561,7 @@
       // từng gây lỗi như bản 212×104), khớp với IMGD_CHUNK_SIZE trong
       // user_custs1_impl.c của firmware dự án này.
       chunkSize: 17,
+      prepWaitMs: 6000,
     },
   };
   let currentDevice = DEVICES["42"];
@@ -562,14 +574,8 @@
 
   let device = null, gattServer = null, longValChar = null, adcChar = null;
   let packedImage = null;
-  // Thời điểm (ms, Date.now()) hoàn tất lần gửi ảnh GẦN NHẤT - dùng để tự
-  // chờ đủ lâu trước khi cho phép gửi ảnh TIẾP THEO. Firmware không còn tự
-  // chờ nữa (chờ chặn lâu trên firmware nhúng có rủi ro treo/reset qua
-  // watchdog) - trách nhiệm chờ chuyển hẳn sang đây, nơi hoàn toàn an toàn.
-  let lastImageSentAt = 0;
-  // Thời gian tối thiểu (ms) giữa 2 lần BẮT ĐẦU gửi ảnh, đủ cho 1 lần
-  // full-refresh UPDATE_FULL (đo thực tế có lúc >3s) hoàn tất trên panel.
-  const IMAGE_COOLDOWN_MS = 6000;
+  // ĐÃ THAY bằng nút "Chuẩn bị gửi ảnh" tường minh (readyToSend, xem dưới)
+  // - rõ ràng hơn cho người dùng và tránh 2 cơ chế chờ chồng chéo nhau.
   let lastLoadedImg = null;
 
   // ---------------------------------------------------------------
@@ -597,15 +603,60 @@
     $("btnMode").disabled = !connected;
     $("btnCal").disabled = !connected;
     updateSendBtn();
+    updatePrepareBtn();
     if(!connected){
       $("devName").textContent = "—";
       $("devVolt").textContent = "— V";
     }
   }
 
+  // "Gửi ảnh" CHỈ bật lên sau khi đã bấm "Chuẩn bị gửi ảnh" và chờ xong -
+  // ép đúng luồng bấm-chuẩn-bị-rồi-mới-gửi mà người dùng yêu cầu, để tránh
+  // gửi đè lên lúc màn hình vật lý còn đang bận từ lần trước (nguyên nhân
+  // "được lúc không" đã gặp, đặc biệt rõ trên bản 4.2" gửi 30.000 byte).
+  let readyToSend = false;
+
   function updateSendBtn(){
-    $("btnSend").disabled = !(device && device.gatt && device.gatt.connected && packedImage);
+    $("btnSend").disabled = !(device && device.gatt && device.gatt.connected && packedImage && readyToSend);
   }
+
+  function updatePrepareBtn(){
+    $("btnPrepare").disabled = !(device && device.gatt && device.gatt.connected && packedImage);
+  }
+
+  async function prepareBeforeSend(){
+    if(!device || !device.gatt || !device.gatt.connected){ log("Chưa kết nối thiết bị.", "err"); return; }
+    if(!packedImage){ log("Chưa có ảnh để gửi - chọn ảnh trước.", "err"); return; }
+
+    readyToSend = false;
+    updateSendBtn();
+    $("btnPrepare").disabled = true;
+
+    const waitMs = currentDevice.prepWaitMs;
+    const startedAt = Date.now();
+    const statusEl = $("prepareStatus");
+
+    while(true){
+      const remain = waitMs - (Date.now()-startedAt);
+      if(remain<=0) break;
+      statusEl.textContent = `Đang chuẩn bị... còn ${(remain/1000).toFixed(1)}s (đợi màn hình ${currentDevice.label} ổn định hẳn trước khi gửi ảnh mới).`;
+      await sleep(200);
+      // Người dùng có thể đã đổi ảnh/ngắt kết nối giữa chừng - huỷ êm nếu vậy.
+      if(!device || !device.gatt || !device.gatt.connected){
+        statusEl.textContent = "Đã huỷ chuẩn bị (mất kết nối).";
+        updatePrepareBtn();
+        return;
+      }
+    }
+
+    statusEl.textContent = `Đã sẵn sàng - bấm "Gửi ảnh lên màn hình" ngay bây giờ.`;
+    readyToSend = true;
+    updateSendBtn();
+    updatePrepareBtn();
+    log(`Đã chuẩn bị xong cho màn ${currentDevice.label} (chờ ${(waitMs/1000).toFixed(0)}s) - có thể gửi ảnh.`, "ok");
+  }
+
+  $("btnPrepare").addEventListener("click", prepareBeforeSend);
 
   // ---------------------------------------------------------------
   // Chọn loại màn hình: cập nhật lại kích thước ảnh/canvas, ẩn/hiện
@@ -631,8 +682,11 @@
     redRow.classList.toggle("disabled", !currentDevice.hasRed);
 
     packedImage = null;
+    readyToSend = false;
+    $("prepareStatus").textContent = "Bấm \"Chuẩn bị gửi ảnh\" trước, đợi xong rồi mới bấm \"Gửi ảnh\" — giúp màn hình (đặc biệt bản 4.2\") ổn định hơn, tránh gửi được lúc được lúc không.";
     $("previewGrid").style.display = "none";
     updateSendBtn();
+    updatePrepareBtn();
 
     log(`Đã chọn màn ${currentDevice.label} (${IMG_W}×${IMG_H}${currentDevice.hasRed?", 3 màu":", đen-trắng"}).`);
 
@@ -1158,12 +1212,14 @@
     const chromaWeight = 6 * (1 - redReduce/120);
     const { packed, classify } = ditherAndPack(ctxOrig, brightnessAdj, chromaWeight, noDither);
     packedImage = packed;
+    readyToSend = false; // ảnh mới (hoặc chỉnh sửa lại) - cần bấm "Chuẩn bị" lại
 
     const ctxDither = cDither.getContext("2d");
     renderPreviewFromBW(ctxDither, classify);
 
     $("previewGrid").style.display = "grid";
     updateSendBtn();
+    updatePrepareBtn();
   }
 
   function handleFile(file){
@@ -1229,18 +1285,9 @@
   async function sendImage(){
     if(!packedImage){ log("Chưa có ảnh để gửi.", "err"); return; }
     if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
-
-    // Chờ đủ lâu để màn hình vật lý làm mới xong hoàn toàn từ lần gửi
-    // TRƯỚC, trước khi bắt đầu phiên mới. Firmware giờ TỪ CHỐI NGAY (không
-    // chờ) nếu vẫn đang bận vẽ - nên phải tự đảm bảo đủ thời gian ở đây,
-    // nếu không ảnh gửi lên sẽ bị bỏ qua âm thầm (web tưởng thành công vì
-    // toàn bộ byte vẫn gửi được qua Bluetooth bình thường, chỉ là firmware
-    // không vẽ gì cả).
-    const elapsed = Date.now() - lastImageSentAt;
-    if(lastImageSentAt>0 && elapsed < IMAGE_COOLDOWN_MS){
-      const remain = IMAGE_COOLDOWN_MS - elapsed;
-      log(`Đang chờ ${(remain/1000).toFixed(1)}s để màn hình làm mới xong lần trước...`);
-      await sleep(remain);
+    if(!readyToSend){
+      log('Bấm "Chuẩn bị gửi ảnh" trước, đợi xong rồi mới gửi.', "err");
+      return;
     }
 
     $("btnSend").disabled = true;
@@ -1294,14 +1341,16 @@
       }
 
       log(`Đã gửi xong toàn bộ ${totalChunks} gói. Thiết bị đang hiển thị ảnh…`, "ok");
-      // Ghi lại mốc thời gian hoàn tất - sendImage() lần SAU sẽ tự chờ đủ
-      // IMAGE_COOLDOWN_MS kể từ đây trước khi bắt đầu, cho màn hình vật lý
-      // đủ thời gian làm mới xong (xem đầu hàm sendImage()).
-      lastImageSentAt = Date.now();
+      // Bắt buộc bấm "Chuẩn bị gửi ảnh" lại trước khi gửi lần tiếp theo -
+      // đúng luồng người dùng yêu cầu, tránh gửi liên tiếp quá nhanh khiến
+      // màn hình vật lý (đặc biệt bản 4.2") chưa kịp làm mới xong.
+      readyToSend = false;
+      $("prepareStatus").textContent = `Đã gửi xong. Bấm "Chuẩn bị gửi ảnh" lại nếu muốn gửi tiếp.`;
     }catch(err){
       log("Lỗi khi gửi ảnh: " + err.message, "err");
     }finally{
       updateSendBtn();
+      updatePrepareBtn();
     }
   }
 
