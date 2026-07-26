@@ -430,6 +430,7 @@
     <div class="opt-row">
       <label><input type="radio" name="fitmode" value="cover" checked> Lấp đầy khung (cắt bớt)</label>
       <label><input type="radio" name="fitmode" value="contain"> Vừa khung (viền trắng)</label>
+      <label><input type="radio" name="fitmode" value="stretch"> Co giãn vừa khít (không cắt, không viền)</label>
     </div>
     <div class="opt-row">
       <label><input type="range" id="threshRange" min="-60" max="60" value="0" style="width:140px"> Điều chỉnh độ sáng/tối</label>
@@ -878,11 +879,23 @@
     ctx.fillStyle = "#fff";
     ctx.fillRect(0,0,IMG_W,IMG_H);
     const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-    const scaleCover = Math.max(IMG_W/iw, IMG_H/ih);
-    const scaleContain = Math.min(IMG_W/iw, IMG_H/ih);
-    const scale = (mode==="contain") ? scaleContain : scaleCover;
-    const dw = Math.max(1, Math.round(iw*scale)), dh = Math.max(1, Math.round(ih*scale));
-    const dx = (IMG_W-dw)/2, dy = (IMG_H-dh)/2;
+    let dw, dh, dx, dy;
+    if(mode === "stretch"){
+      // Co giãn RIÊNG theo từng chiều (không giữ tỉ lệ gốc) để lấp đầy
+      // ĐÚNG khung - không cắt bớt (như cover), không viền trắng (như
+      // contain). Đánh đổi: ảnh có thể hơi méo nếu tỉ lệ khung khác tỉ
+      // lệ ảnh gốc, nhưng giữ lại 100% nội dung ảnh, không mất chi tiết
+      // nào ở rìa.
+      dw = IMG_W; dh = IMG_H; dx = 0; dy = 0;
+    }else{
+      const scaleCover = Math.max(IMG_W/iw, IMG_H/ih);
+      const scaleContain = Math.min(IMG_W/iw, IMG_H/ih);
+      const scale = (mode==="contain") ? scaleContain : scaleCover;
+      dw = Math.max(1, Math.round(iw*scale));
+      dh = Math.max(1, Math.round(ih*scale));
+      dx = (IMG_W-dw)/2;
+      dy = (IMG_H-dh)/2;
+    }
 
     let src = img, curW = iw, curH = ih;
     while(curW > dw*2 || curH > dh*2){
