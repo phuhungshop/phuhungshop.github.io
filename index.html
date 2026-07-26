@@ -234,11 +234,12 @@
   /* ---------- Device picker ---------- */
   .device-picker{
     display:grid;
-    grid-template-columns:1fr 1fr;
+    grid-template-columns:1fr 1fr 1fr;
     gap:10px;
     margin-bottom:4px;
   }
-  @media (max-width:480px){ .device-picker{ grid-template-columns:1fr; } }
+  @media (max-width:620px){ .device-picker{ grid-template-columns:1fr 1fr; } }
+  @media (max-width:380px){ .device-picker{ grid-template-columns:1fr; } }
   .device-picker label{
     display:flex; flex-direction:column; gap:4px;
     border:1px solid var(--rule); border-radius:8px; padding:12px 14px;
@@ -410,8 +411,13 @@
       </label>
       <label id="devLabel213">
         <input type="radio" name="deviceType" value="213">
-        <span class="name">Màn 2.13 inch</span>
+        <span class="name">Màn 2.13" (A41/A55)</span>
         <span class="spec">212×104 · đen-trắng</span>
+      </label>
+      <label id="devLabel250">
+        <input type="radio" name="deviceType" value="250">
+        <span class="name">Màn 2.13" (250×122)</span>
+        <span class="spec">250×122 · đen-trắng</span>
       </label>
     </div>
 
@@ -525,7 +531,7 @@
       chunkSize: 128,
     },
     "213": {
-      label: "2.13 inch",
+      label: "2.13 inch (212×104)",
       W: 212, H: 104,
       hasRed: false,
       // Firmware bản 2.13" (dự án 2) đã sửa IMGD_CHUNK_SIZE xuống 17 byte
@@ -533,6 +539,16 @@
       // trực tiếp (20 byte cả header), tránh cơ chế "ghi dài" không ổn
       // định từng gây nhiễu ảnh khi lên màn hình thật. PHẢI khớp đúng
       // con số này với firmware, không tự ý đổi một bên.
+      chunkSize: 17,
+    },
+    "250": {
+      label: "2.13 inch (250×122)",
+      W: 250, H: 122,
+      hasRed: false,
+      // Dự án 3 (2.13" 250×122) - port tính năng ảnh từ dự án 2, dùng
+      // ĐÚNG chunkSize 17 byte ngay từ đầu (không có lịch sử 128 byte
+      // từng gây lỗi như bản 212×104), khớp với IMGD_CHUNK_SIZE trong
+      // user_custs1_impl.c của firmware dự án này.
       chunkSize: 17,
     },
   };
@@ -609,6 +625,7 @@
 
     $("devLabel42").classList.toggle("active", key==="42");
     $("devLabel213").classList.toggle("active", key==="213");
+    $("devLabel250").classList.toggle("active", key==="250");
 
     const redRow = $("redReduceRow");
     redRow.classList.toggle("disabled", !currentDevice.hasRed);
