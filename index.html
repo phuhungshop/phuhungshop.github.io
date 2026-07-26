@@ -527,13 +527,12 @@
       label: "4.2 inch",
       W: 400, H: 300,
       hasRed: true,
-      // Firmware bản 4.2" (dự án 1, src/user_custs1_impl.c) đã đổi
-      // IMGD_CHUNK_SIZE từ 128 xuống 17 byte/gói (khớp bản này) - tránh
-      // cơ chế "ghi dài" nhiều bước của BLE, nghi ngờ chính là nguyên
-      // nhân "mới khởi động gửi ảnh được, để yên ~10 phút thì lỗi" đã
-      // gặp. PHẢI khớp đúng con số này với firmware, không tự ý đổi
-      // một bên.
-      chunkSize: 17,
+      // Firmware bản 4.2" (dự án 1, src/user_custs1_impl.c) hardcode
+      // IMGD_CHUNK_SIZE=128 - GIỮ NGUYÊN, không đổi, vì file firmware đó
+      // chưa được sửa sang 17 byte/gói. Đổi ở đây mà không đổi firmware
+      // tương ứng sẽ làm lệch hẳn phép tính chunk_index*IMGD_CHUNK_SIZE
+      // bên firmware, hỏng luôn thiết bị này.
+      chunkSize: 128,
       // Thời gian chờ (ms) khi bấm nút "Chuẩn bị gửi ảnh". Bản 4.2" gửi
       // 30.000 byte/lần (dữ liệu 3 màu, gấp ~7-10 lần 2 bản 2.13") nên
       // full-refresh vật lý lâu hơn nhiều - cần chờ dư dả hơn hẳn để
