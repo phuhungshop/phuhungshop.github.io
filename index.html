@@ -1396,6 +1396,15 @@
   // Đã giảm từ 20 xuống 8 phần tử tối đa để khớp firmware (RAM board 212
   // rất sát giới hạn - xem user_custs1_impl.c).
   // =================================================================
+  // QUAN TRỌNG: kích thước RIÊNG cho khung thiết kế layout - KHÔNG dùng
+  // chung IMG_W/IMG_H với mục "Tải ảnh cá nhân" ở trên nữa. Trước đây dùng
+  // chung khiến layout tính sai toạ độ hoàn toàn nếu người dùng quên chọn
+  // đúng "2.13 (212×104)" ở mục ảnh trước khi thiết kế layout (mặc định
+  // mục đó đang chọn màn 4.2" 400×300). Vì hiện chỉ firmware 212×104 có
+  // tính năng layout, cố định cứng luôn 2 số này cho chắc chắn.
+  const LAYOUT_DEVICE_W = 212;
+  const LAYOUT_DEVICE_H = 104;
+
   const LAYOUT_MAX_ELEMENTS = 8;
   const LAYOUT_ELEM_SIZE = 8;
   const LAYOUT_CHUNK_SIZE = 17;
@@ -1434,8 +1443,8 @@
   // Độ phóng to khung thiết kế (px web / px thiết bị) - màn càng nhỏ thì
   // phóng càng to để dễ kéo-thả bằng ngón tay/chuột.
   function layoutZoom(){
-    if(IMG_W<=130) return 4;
-    if(IMG_W<=260) return 3;
+    if(LAYOUT_DEVICE_W<=130) return 4;
+    if(LAYOUT_DEVICE_W<=260) return 3;
     return 2;
   }
 
@@ -1469,8 +1478,8 @@
   function renderLayoutStage(){
     const zoom = layoutZoom();
     const stage = $("layoutStage");
-    stage.style.width = (IMG_W*zoom)+"px";
-    stage.style.height = (IMG_H*zoom)+"px";
+    stage.style.width = (LAYOUT_DEVICE_W*zoom)+"px";
+    stage.style.height = (LAYOUT_DEVICE_H*zoom)+"px";
     stage.innerHTML = "";
 
     layoutElements.forEach((el, idx) => {
@@ -1529,8 +1538,8 @@
     const el = layoutElements[layoutDrag.idx];
     const dxDev = Math.round(dxPx/layoutDrag.zoom);
     const dyDev = Math.round(dyPx/layoutDrag.zoom);
-    const maxX = Math.max(0, IMG_W - (el.type===1 ? 8 : el.w));
-    const maxY = Math.max(0, IMG_H - (el.type===1 ? 8 : el.h));
+    const maxX = Math.max(0, LAYOUT_DEVICE_W - (el.type===1 ? 8 : el.w));
+    const maxY = Math.max(0, LAYOUT_DEVICE_H - (el.type===1 ? 8 : el.h));
     el.x = layoutClamp(layoutDrag.elStartX+dxDev, 0, maxX);
     el.y = layoutClamp(layoutDrag.elStartY+dyDev, 0, maxY);
     renderLayoutStage();
@@ -1640,14 +1649,14 @@
   // và chỉnh Rộng/Cao lại bình thường qua bảng thuộc tính như mọi khung.
   $("btnAddHBar").addEventListener("click", () => {
     if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log("Đã đạt tối đa 8 phần tử.", "err"); return; }
-    const w = Math.min(100, Math.max(4, IMG_W-8));
+    const w = Math.min(100, Math.max(4, LAYOUT_DEVICE_W-8));
     layoutElements.push({ type:2, x:4, y:4, font:0, color:0, bind:0, w, h:3 });
     layoutSelected = layoutElements.length-1;
     renderLayoutStage();
   });
   $("btnAddVBar").addEventListener("click", () => {
     if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log("Đã đạt tối đa 8 phần tử.", "err"); return; }
-    const h = Math.min(60, Math.max(4, IMG_H-8));
+    const h = Math.min(60, Math.max(4, LAYOUT_DEVICE_H-8));
     layoutElements.push({ type:2, x:4, y:4, font:0, color:0, bind:0, w:3, h });
     layoutSelected = layoutElements.length-1;
     renderLayoutStage();
