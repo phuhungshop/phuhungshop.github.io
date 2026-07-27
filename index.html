@@ -1507,12 +1507,23 @@
       div.style.setProperty("--el-color", layoutColorCss(el.color));
 
       if(el.type===1){
+        const tb = layoutTextBounds(el);
         div.textContent = layoutBindPreviewText(el.bind);
         div.style.fontSize = (LAYOUT_FONT_PX[el.font]*zoom)+"px";
         div.style.fontWeight = el.font>=1 ? "700" : "400";
         div.style.color = layoutColorCss(el.color);
         div.style.background = el.color===1 ? "#333" : "transparent"; // chữ trắng cần nền tối mới thấy trên web
         div.style.padding = "1px 3px";
+        // QUAN TRỌNG: đặt CỨNG chiều rộng/cao theo đúng tính toán đã hiệu
+        // chỉnh (layoutTextBounds), KHÔNG để trình duyệt tự do quyết định
+        // theo font hệ thống của nó - font hệ thống có thể rộng/hẹp khác
+        // hẳn font thật trên thiết bị, gây lệch tỉ lệ như đã gặp. Cắt bớt
+        // phần chữ tràn ra ngoài khung tính toán (overflow:hidden) để ô
+        // luôn đúng đúng kích thước đã tính, dùng cho cả kéo-thả lẫn hiển
+        // thị.
+        div.style.width = (tb.w*zoom)+"px";
+        div.style.height = (tb.h*zoom)+"px";
+        div.style.overflow = "hidden";
       }else{
         div.style.width = (el.w*zoom)+"px";
         div.style.height = (el.h*zoom)+"px";
@@ -1546,14 +1557,16 @@
   }
 
   // Ước lượng kích thước (px thiết bị) của 1 phần tử chữ động - dùng cỡ
-  // chữ THẬT (LAYOUT_FONT_PX) nhân với số ký tự, để giới hạn kéo-thả
-  // không cho kéo chữ ra ngoài màn hình. Chỉ là ước lượng gần đúng (chữ
-  // 7 đoạn/chữ thường có bề rộng mỗi ký tự khác nhau), đủ dùng cho việc
-  // giới hạn kéo-thả, không cần chính xác tuyệt đối.
+  // chữ THẬT (LAYOUT_FONT_PX) nhân với số ký tự. Tỉ lệ rộng/cao mỗi ký tự
+  // KHÁC NHAU rõ rệt giữa font 7 đoạn (số to, gần vuông) và font chữ
+  // thường (hẹp hơn) - đã HIỆU CHỈNH LẠI theo đúng ảnh chụp màn hình thật
+  // (chữ "2026" font 7 đoạn to chiếm gần hết 212px cho 4 ký tự => tỉ lệ
+  // ~0.77, KHÔNG PHẢI 0.62 như ước lượng ban đầu - sai khá nhiều).
+  const LAYOUT_CHAR_WIDTH_RATIO = { 0:0.58, 1:0.77, 2:0.58, 3:0.77 };
   function layoutTextBounds(el){
     const text = layoutBindPreviewText(el.bind);
     const fh = LAYOUT_FONT_PX[el.font];
-    const charW = fh*0.62;
+    const charW = fh*LAYOUT_CHAR_WIDTH_RATIO[el.font];
     return { w: Math.max(8, Math.round(text.length*charW)), h: fh };
   }
 
