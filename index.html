@@ -1479,7 +1479,15 @@
     }
   }
 
-  const LAYOUT_FONT_PX = { 0:18, 1:26, 2:30, 3:40 }; // cỡ chữ web GẦN ĐÚNG cho từng font id (đã tăng cho dễ nhìn)
+  // Cỡ chữ THẬT trên thiết bị (px) - lấy trực tiếp từ TÊN font trong
+  // firmware (font_list[] trong epd_gui.c): font 0=sfont (chữ thường nhỏ,
+  // ước lượng ~12px), font 1=F_DSEG7_50 (7 đoạn, cao ĐÚNG 50px - tên font
+  // ghi rõ), font 2=sfont16 (chữ thường lớn hơn, ~18px), font 3=F_DSEG7_66
+  // (7 đoạn to nhất, cao ĐÚNG 66px). Bản trước ước lượng sai hoàn toàn
+  // (18-40px) khiến khung xem trước vẽ chữ nhỏ hơn RẤT nhiều so với thực
+  // tế (chữ 7 đoạn thật chiếm gần nửa chiều cao màn 104px thiết bị) - đã
+  // xác nhận qua ảnh chụp màn hình thật.
+  const LAYOUT_FONT_PX = { 0:12, 1:50, 2:18, 3:66 };
   function layoutColorCss(c){ return c===0 ? "#111" : c===1 ? "#fff" : "#c81e1e"; }
 
   // ---------------- Vẽ lại toàn bộ khung thiết kế (stage) ----------------
@@ -1500,7 +1508,7 @@
 
       if(el.type===1){
         div.textContent = layoutBindPreviewText(el.bind);
-        div.style.fontSize = (LAYOUT_FONT_PX[el.font]*zoom/3)+"px";
+        div.style.fontSize = (LAYOUT_FONT_PX[el.font]*zoom)+"px";
         div.style.fontWeight = el.font>=1 ? "700" : "400";
         div.style.color = layoutColorCss(el.color);
         div.style.background = el.color===1 ? "#333" : "transparent"; // chữ trắng cần nền tối mới thấy trên web
@@ -1537,6 +1545,18 @@
     window.addEventListener("pointerup", layoutEndDrag);
   }
 
+  // Ước lượng kích thước (px thiết bị) của 1 phần tử chữ động - dùng cỡ
+  // chữ THẬT (LAYOUT_FONT_PX) nhân với số ký tự, để giới hạn kéo-thả
+  // không cho kéo chữ ra ngoài màn hình. Chỉ là ước lượng gần đúng (chữ
+  // 7 đoạn/chữ thường có bề rộng mỗi ký tự khác nhau), đủ dùng cho việc
+  // giới hạn kéo-thả, không cần chính xác tuyệt đối.
+  function layoutTextBounds(el){
+    const text = layoutBindPreviewText(el.bind);
+    const fh = LAYOUT_FONT_PX[el.font];
+    const charW = fh*0.62;
+    return { w: Math.max(8, Math.round(text.length*charW)), h: fh };
+  }
+
   function layoutOnDrag(e){
     if(!layoutDrag) return;
     const dxPx = e.clientX - layoutDrag.startX;
@@ -1546,8 +1566,9 @@
     const el = layoutElements[layoutDrag.idx];
     const dxDev = Math.round(dxPx/layoutDrag.zoom);
     const dyDev = Math.round(dyPx/layoutDrag.zoom);
-    const maxX = Math.max(0, LAYOUT_DEVICE_W - (el.type===1 ? 8 : el.w));
-    const maxY = Math.max(0, LAYOUT_DEVICE_H - (el.type===1 ? 8 : el.h));
+    const bounds = el.type===1 ? layoutTextBounds(el) : {w: el.w, h: el.h};
+    const maxX = Math.max(0, LAYOUT_DEVICE_W - bounds.w);
+    const maxY = Math.max(0, LAYOUT_DEVICE_H - bounds.h);
     el.x = layoutClamp(layoutDrag.elStartX+dxDev, 0, maxX);
     el.y = layoutClamp(layoutDrag.elStartY+dyDev, 0, maxY);
     renderLayoutStage();
