@@ -533,7 +533,7 @@
   <!-- Custom layout designer (TEST) -->
   <section class="card">
     <h2><span class="idx">06</span> Giao diện tuỳ chỉnh (đang test)</h2>
-    <p class="desc">Bấm "+Thêm" để tạo phần tử, kéo-thả trực tiếp trên khung màn hình bên dưới để đặt vị trí. Bấm vào 1 phần tử để chỉnh nội dung/cỡ chữ/màu hoặc xoá. Đồng hồ tự vẽ lại mỗi phút bằng giờ THẬT, không phải ảnh tĩnh. Hiện chỉ firmware 2.13" 212×104 đã có tính năng này.</p>
+    <p class="desc">Bấm "+Thêm" để tạo phần tử, kéo-thả trực tiếp trên khung màn hình bên dưới để đặt vị trí. Bấm vào 1 phần tử để chỉnh nội dung/cỡ chữ/màu hoặc xoá. Đồng hồ tự vẽ lại mỗi phút bằng giờ THẬT, không phải ảnh tĩnh. Dùng chung bộ chọn màn hình ở mục 04 phía trên - cả 3 màn (4.2", 212×104, 250×122) đều đã hỗ trợ. Riêng "Đồng hồ kim" hiện chỉ có ở 2 màn 2.13".</p>
 
     <div class="layout-toolbar">
       <button id="btnAddText" class="secondary">+ Thêm chữ</button>
@@ -636,6 +636,17 @@
       // epd.c). PHẢI khớp đúng con số 128 này với firmware, không tự ý
       // đổi một bên.
       chunkSize: 128,
+      // Giao diện tuỳ chỉnh (layout): dự án 4.2" dùng BẢNG FONT KHÁC HẲN
+      // 2 bản 2.13" (sfont≈12px, CLKDIGIT≈90px, sfont16≈18px,
+      // YEARFONT≈36px) - firmware tự ánh xạ lại id 0-3 sang đúng font
+      // thật của nó (xem layout_font_map[] trong user_custs1_impl.c),
+      // web chỉ cần biết ĐÚNG KÍCH THƯỚC THẬT để vẽ khung xem trước cho
+      // khớp tỉ lệ.
+      layoutFontPx: { 0:12, 1:90, 2:18, 3:36 },
+      layoutCharWidthRatio: { 0:0.58, 1:0.7, 2:0.58, 3:0.65 },
+      // CHƯA hỗ trợ "đồng hồ kim" ở firmware 4.2" (thiếu sẵn hàm vẽ hình
+      // tròn/đường thẳng, để dành lượt sau) - ẩn nút đó khi chọn màn này.
+      layoutHasClock: false,
     },
     "213": {
       label: "2.13 inch (212×104)",
@@ -647,6 +658,12 @@
       // định từng gây nhiễu ảnh khi lên màn hình thật. PHẢI khớp đúng
       // con số này với firmware, không tự ý đổi một bên.
       chunkSize: 17,
+      // Cỡ chữ THẬT trên thiết bị (px) - lấy trực tiếp từ tên font trong
+      // firmware: 0=sfont(~12px), 1=F_DSEG7_50(50px), 2=sfont16(~18px),
+      // 3=F_DSEG7_66(66px) - đã hiệu chỉnh theo ảnh chụp màn hình thật.
+      layoutFontPx: { 0:12, 1:50, 2:18, 3:66 },
+      layoutCharWidthRatio: { 0:0.58, 1:0.77, 2:0.58, 3:0.77 },
+      layoutHasClock: true,
     },
     "250": {
       label: "2.13 inch (250×122)",
@@ -657,6 +674,11 @@
       // từng gây lỗi như bản 212×104), khớp với IMGD_CHUNK_SIZE trong
       // user_custs1_impl.c của firmware dự án này.
       chunkSize: 17,
+      // Cùng dòng firmware/font với bản 212×104 (cùng font_list[]) - dùng
+      // chung số liệu cỡ chữ đã hiệu chỉnh.
+      layoutFontPx: { 0:12, 1:50, 2:18, 3:66 },
+      layoutCharWidthRatio: { 0:0.58, 1:0.77, 2:0.58, 3:0.77 },
+      layoutHasClock: true,
     },
   };
   let currentDevice = DEVICES["42"];
@@ -733,6 +755,19 @@
     packedImage = null;
     $("previewGrid").style.display = "none";
     updateSendBtn();
+
+    // Đồng hồ kim (type=5) chưa được firmware 4.2" hỗ trợ - ẩn nút thêm,
+    // và loại bỏ luôn phần tử đồng hồ kim cũ (nếu có) khi chuyển sang màn
+    // này để tránh gửi xuống 1 loại phần tử firmware sẽ âm thầm bỏ qua.
+    $("btnAddClock").style.display = currentDevice.layoutHasClock ? "" : "none";
+    if(!currentDevice.layoutHasClock && typeof layoutElements !== "undefined"){
+      const before = layoutElements.length;
+      layoutElements = layoutElements.filter(el => el.type!==5);
+      if(layoutElements.length < before){
+        log(`Màn ${currentDevice.label} chưa hỗ trợ "Đồng hồ kim" - đã bỏ ${before-layoutElements.length} phần tử loại này khỏi thiết kế.`, "err");
+        layoutSelected = -1;
+      }
+    }
 
     log(`Đã chọn màn ${currentDevice.label} (${IMG_W}×${IMG_H}${currentDevice.hasRed?", 3 màu":", đen-trắng"}).`);
 
@@ -1413,15 +1448,10 @@
   // Đã tăng từ 8 lên 16 phần tử tối đa, khớp firmware sau khi giải phóng
   // thêm RAM (xem CFG_RET_DATA_SIZE trong da14585_config_advanced.h).
   // =================================================================
-  // QUAN TRỌNG: kích thước RIÊNG cho khung thiết kế layout - KHÔNG dùng
-  // chung IMG_W/IMG_H với mục "Tải ảnh cá nhân" ở trên nữa. Trước đây dùng
-  // chung khiến layout tính sai toạ độ hoàn toàn nếu người dùng quên chọn
-  // đúng "2.13 (212×104)" ở mục ảnh trước khi thiết kế layout (mặc định
-  // mục đó đang chọn màn 4.2" 400×300). Vì hiện chỉ firmware 212×104 có
-  // tính năng layout, cố định cứng luôn 2 số này cho chắc chắn.
-  const LAYOUT_DEVICE_W = 212;
-  const LAYOUT_DEVICE_H = 104;
-
+  // ĐÃ GỘP: khung thiết kế layout giờ dùng CHUNG IMG_W/IMG_H với mục "Tải
+  // ảnh cá nhân" phía trên (cùng 1 bộ chọn thiết bị cho cả 2 tính năng) -
+  // cả 3 màn hình (4.2", 212×104, 250×122) đều đã có tính năng layout ở
+  // firmware, không còn giới hạn chỉ 212×104 như trước.
   const LAYOUT_MAX_ELEMENTS = 16;
   const LAYOUT_ELEM_SIZE = 8;
   const LAYOUT_CHUNK_SIZE = 17;
@@ -1470,8 +1500,8 @@
   // Độ phóng to khung thiết kế (px web / px thiết bị) - màn càng nhỏ thì
   // phóng càng to để dễ kéo-thả bằng ngón tay/chuột.
   function layoutZoom(){
-    if(LAYOUT_DEVICE_W<=130) return 4;
-    if(LAYOUT_DEVICE_W<=260) return 3;
+    if(IMG_W<=130) return 4;
+    if(IMG_W<=260) return 3;
     return 2;
   }
 
@@ -1501,15 +1531,9 @@
     }
   }
 
-  // Cỡ chữ THẬT trên thiết bị (px) - lấy trực tiếp từ TÊN font trong
-  // firmware (font_list[] trong epd_gui.c): font 0=sfont (chữ thường nhỏ,
-  // ước lượng ~12px), font 1=F_DSEG7_50 (7 đoạn, cao ĐÚNG 50px - tên font
-  // ghi rõ), font 2=sfont16 (chữ thường lớn hơn, ~18px), font 3=F_DSEG7_66
-  // (7 đoạn to nhất, cao ĐÚNG 66px). Bản trước ước lượng sai hoàn toàn
-  // (18-40px) khiến khung xem trước vẽ chữ nhỏ hơn RẤT nhiều so với thực
-  // tế (chữ 7 đoạn thật chiếm gần nửa chiều cao màn 104px thiết bị) - đã
-  // xác nhận qua ảnh chụp màn hình thật.
-  const LAYOUT_FONT_PX = { 0:12, 1:50, 2:18, 3:66 };
+  // Cỡ chữ THẬT (px) giờ lấy theo TỪNG THIẾT BỊ (currentDevice.layoutFontPx)
+  // - dự án 4.2" dùng bảng font hoàn toàn khác 2 bản 2.13" (xem DEVICES ở
+  // trên), không thể dùng chung 1 bảng cố định nữa.
   function layoutColorCss(c){ return c===0 ? "#111" : c===1 ? "#fff" : "#c81e1e"; }
 
   // ---------------- Vẽ lại toàn bộ khung thiết kế (stage) ----------------
@@ -1553,8 +1577,8 @@
   function renderLayoutStage(){
     const zoom = layoutZoom();
     const stage = $("layoutStage");
-    stage.style.width = (LAYOUT_DEVICE_W*zoom)+"px";
-    stage.style.height = (LAYOUT_DEVICE_H*zoom)+"px";
+    stage.style.width = (IMG_W*zoom)+"px";
+    stage.style.height = (IMG_H*zoom)+"px";
     stage.innerHTML = "";
 
     layoutElements.forEach((el, idx) => {
@@ -1578,7 +1602,7 @@
       if(el.type===1){
         const tb = layoutTextBounds(el);
         div.textContent = layoutBindPreviewText(el.bind);
-        div.style.fontSize = (LAYOUT_FONT_PX[el.font]*zoom)+"px";
+        div.style.fontSize = (currentDevice.layoutFontPx[el.font]*zoom)+"px";
         div.style.fontWeight = el.font>=1 ? "700" : "400";
         div.style.color = layoutColorCss(el.color);
         div.style.background = el.color===1 ? "#333" : "transparent"; // chữ trắng cần nền tối mới thấy trên web
@@ -1635,16 +1659,16 @@
   }
 
   // Ước lượng kích thước (px thiết bị) của 1 phần tử chữ động - dùng cỡ
-  // chữ THẬT (LAYOUT_FONT_PX) nhân với số ký tự. Tỉ lệ rộng/cao mỗi ký tự
-  // KHÁC NHAU rõ rệt giữa font 7 đoạn (số to, gần vuông) và font chữ
-  // thường (hẹp hơn) - đã HIỆU CHỈNH LẠI theo đúng ảnh chụp màn hình thật
-  // (chữ "2026" font 7 đoạn to chiếm gần hết 212px cho 4 ký tự => tỉ lệ
-  // ~0.77, KHÔNG PHẢI 0.62 như ước lượng ban đầu - sai khá nhiều).
-  const LAYOUT_CHAR_WIDTH_RATIO = { 0:0.58, 1:0.77, 2:0.58, 3:0.77 };
+  // chữ THẬT theo TỪNG THIẾT BỊ (currentDevice.layoutFontPx) nhân với số
+  // ký tự. Tỉ lệ rộng/cao mỗi ký tự KHÁC NHAU rõ rệt giữa font kiểu số (to,
+  // gần vuông) và font chữ thường (hẹp hơn) - đã HIỆU CHỈNH theo đúng ảnh
+  // chụp màn hình thật cho 2 bản 2.13" (chữ "2026" font 7 đoạn to chiếm
+  // gần hết 212px cho 4 ký tự => tỉ lệ ~0.77); bản 4.2" dùng số ước lượng
+  // riêng (xem DEVICES) do chưa có ảnh thật để hiệu chỉnh.
   function layoutTextBounds(el){
     const text = layoutBindPreviewText(el.bind);
-    const fh = LAYOUT_FONT_PX[el.font];
-    const charW = fh*LAYOUT_CHAR_WIDTH_RATIO[el.font];
+    const fh = currentDevice.layoutFontPx[el.font];
+    const charW = fh*currentDevice.layoutCharWidthRatio[el.font];
     return { w: Math.max(8, Math.round(text.length*charW)), h: fh };
   }
 
@@ -1663,14 +1687,14 @@
       // hẳn (tâm phải cách mép ít nhất đúng 1 bán kính để hình tròn không
       // bị cắt).
       const r = el.w;
-      const minX = r, maxX = Math.max(r, LAYOUT_DEVICE_W-r);
-      const minY = r, maxY = Math.max(r, LAYOUT_DEVICE_H-r);
+      const minX = r, maxX = Math.max(r, IMG_W-r);
+      const minY = r, maxY = Math.max(r, IMG_H-r);
       el.x = layoutClamp(layoutDrag.elStartX+dxDev, minX, maxX);
       el.y = layoutClamp(layoutDrag.elStartY+dyDev, minY, maxY);
     }else{
       const bounds = el.type===1 ? layoutTextBounds(el) : {w: el.w, h: el.h};
-      const maxX = Math.max(0, LAYOUT_DEVICE_W - bounds.w);
-      const maxY = Math.max(0, LAYOUT_DEVICE_H - bounds.h);
+      const maxX = Math.max(0, IMG_W - bounds.w);
+      const maxY = Math.max(0, IMG_H - bounds.h);
       el.x = layoutClamp(layoutDrag.elStartX+dxDev, 0, maxX);
       el.y = layoutClamp(layoutDrag.elStartY+dyDev, 0, maxY);
     }
@@ -1814,8 +1838,8 @@
     layoutSizePromptType = 4;
     // Lịch tháng cần đủ chỗ cho lưới 7 cột x tối đa 6 hàng - mặc định
     // gợi ý cỡ lớn hơn hẳn khung thường.
-    $("boxSizeW").value = Math.min(150, LAYOUT_DEVICE_W-8);
-    $("boxSizeH").value = Math.min(80, LAYOUT_DEVICE_H-8);
+    $("boxSizeW").value = Math.min(150, IMG_W-8);
+    $("boxSizeH").value = Math.min(80, IMG_H-8);
     $("layoutBoxSizePrompt").style.display = "flex";
   });
   $("btnBoxSizeCancel").addEventListener("click", () => {
@@ -1858,14 +1882,14 @@
   // và chỉnh Rộng/Cao lại bình thường qua bảng thuộc tính như mọi khung.
   $("btnAddHBar").addEventListener("click", () => {
     if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
-    const w = Math.min(100, Math.max(4, LAYOUT_DEVICE_W-8));
+    const w = Math.min(100, Math.max(4, IMG_W-8));
     layoutElements.push({ type:2, x:4, y:4, font:0, color:0, bind:0, w, h:3 });
     layoutSelected = layoutElements.length-1;
     renderLayoutStage();
   });
   $("btnAddVBar").addEventListener("click", () => {
     if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
-    const h = Math.min(60, Math.max(4, LAYOUT_DEVICE_H-8));
+    const h = Math.min(60, Math.max(4, IMG_H-8));
     layoutElements.push({ type:2, x:4, y:4, font:0, color:0, bind:0, w:3, h });
     layoutSelected = layoutElements.length-1;
     renderLayoutStage();
@@ -1959,7 +1983,7 @@
     const data = {
       app: "ekclock-layout-designer",
       version: 1,
-      device: { w: LAYOUT_DEVICE_W, h: LAYOUT_DEVICE_H },
+      device: { w: IMG_W, h: IMG_H },
       elements: layoutElements,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -2039,6 +2063,7 @@
   // Khởi tạo canvas + trạng thái ban đầu theo thiết bị mặc định (4.2")
   $("canvasOrig").width = IMG_W; $("canvasOrig").height = IMG_H;
   $("canvasDither").width = IMG_W; $("canvasDither").height = IMG_H;
+  $("btnAddClock").style.display = currentDevice.layoutHasClock ? "" : "none";
   setConnectedUI(false);
 })();
 </script>
