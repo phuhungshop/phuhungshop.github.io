@@ -268,6 +268,7 @@
   .layout-el.el-text{ padding:1px 2px; }
   .layout-el.el-box-solid{ background:var(--el-color, #111); }
   .layout-el.el-box-outline{ border-width:1.5px; border-color:var(--el-color, #111); border-style:solid; background:transparent; }
+  .layout-el.el-plain{ background:transparent; }
 
   .layout-props{
     background:#fff; border:1px solid var(--rule); border-radius:8px;
@@ -536,10 +537,12 @@
 
     <div class="layout-toolbar">
       <button id="btnAddText" class="secondary">+ Thêm chữ</button>
-      <button id="btnAddBox" class="secondary">+ Thêm khung/lịch</button>
+      <button id="btnAddBox" class="secondary">+ Thêm khung</button>
+      <button id="btnAddCalendar" class="secondary">+ Lịch tháng thật</button>
+      <button id="btnAddClock" class="secondary">+ Đồng hồ kim</button>
       <button id="btnAddHBar" class="secondary">+ Thanh ngang</button>
       <button id="btnAddVBar" class="secondary">+ Thanh dọc</button>
-      <span id="layoutCountLabel" style="font-size:11.5px; color:var(--ink-faint); margin-left:auto;">0/8 phần tử</span>
+      <span id="layoutCountLabel" style="font-size:11.5px; color:var(--ink-faint); margin-left:auto;">0/16 phần tử</span>
     </div>
 
     <div id="layoutBoxSizePrompt" class="layout-size-prompt" style="display:none;">
@@ -548,6 +551,13 @@
       <label class="lf">Cao <input type="number" id="boxSizeH" min="4" max="255" value="30"></label>
       <button id="btnBoxSizeOk" class="small">Tạo & kéo vào khung</button>
       <button id="btnBoxSizeCancel" class="secondary small">Huỷ</button>
+    </div>
+
+    <div id="layoutClockSizePrompt" class="layout-size-prompt" style="display:none;">
+      <span style="font-size:11.5px; color:var(--ink-soft);">Bán kính mặt đồng hồ (px thiết bị):</span>
+      <label class="lf">Bán kính <input type="number" id="clockRadius" min="10" max="50" value="35"></label>
+      <button id="btnClockSizeOk" class="small">Tạo & kéo vào khung</button>
+      <button id="btnClockSizeCancel" class="secondary small">Huỷ</button>
     </div>
 
     <div id="layoutStageWrap">
@@ -1393,8 +1403,8 @@
   // Lệnh 0x98 (bắt đầu, gửi số lượng phần tử) + 0x99 (từng gói dữ liệu) -
   // dùng lại nguyên xi cơ chế truyền gói nhỏ đã ổn định của tính năng ảnh.
   //
-  // Đã giảm từ 20 xuống 8 phần tử tối đa để khớp firmware (RAM board 212
-  // rất sát giới hạn - xem user_custs1_impl.c).
+  // Đã tăng từ 8 lên 16 phần tử tối đa, khớp firmware sau khi giải phóng
+  // thêm RAM (xem CFG_RET_DATA_SIZE trong da14585_config_advanced.h).
   // =================================================================
   // QUAN TRỌNG: kích thước RIÊNG cho khung thiết kế layout - KHÔNG dùng
   // chung IMG_W/IMG_H với mục "Tải ảnh cá nhân" ở trên nữa. Trước đây dùng
@@ -1405,7 +1415,7 @@
   const LAYOUT_DEVICE_W = 212;
   const LAYOUT_DEVICE_H = 104;
 
-  const LAYOUT_MAX_ELEMENTS = 8;
+  const LAYOUT_MAX_ELEMENTS = 16;
   const LAYOUT_ELEM_SIZE = 8;
   const LAYOUT_CHUNK_SIZE = 17;
 
@@ -1422,10 +1432,12 @@
   ];
   const LAYOUT_BINDS = [
     { value: 0, label: "Giờ:Phút (HH:MM)" },
-    { value: 1, label: "Giờ:Phút:Giây" },
+    { value: 10, label: "Giờ (riêng)" },
+    { value: 11, label: "Phút (riêng)" },
     { value: 2, label: "Ngày/Tháng" },
     { value: 3, label: "Ngày/Tháng/Năm" },
     { value: 4, label: "Tên Thứ" },
+    { value: 9, label: "Tên Thứ (ngắn: T2, T3...)" },
     { value: 5, label: "Âm lịch Ngày/Tháng" },
     { value: 6, label: "Năm" },
     { value: 7, label: "Ngày (số)" },
@@ -1435,9 +1447,9 @@
   // kiểu đồng hồ điện tử) - không có dấu ":" "/" hay chữ tiếng Việt có dấu.
   // Chọn nhầm nội dung có ký tự không có trong font này từng gây crash
   // firmware thật (đã sửa ở firmware, nhưng vẫn lọc luôn ở đây cho chắc -
-  // 2 lớp bảo vệ tốt hơn 1) - chỉ 6/7/8 (Năm/Ngày/Tháng dạng số thuần) là
-  // an toàn với font 7 đoạn.
-  const LAYOUT_BIND_NUMERIC_ONLY = [6, 7, 8];
+  // 2 lớp bảo vệ tốt hơn 1) - 6/7/8 (Năm/Ngày/Tháng) và 10/11 (Giờ/Phút
+  // riêng) đều là số thuần, an toàn với font 7 đoạn.
+  const LAYOUT_BIND_NUMERIC_ONLY = [6, 7, 8, 10, 11];
   function isSevenSegmentFont(font){ return font===1 || font===3; }
 
   // Mỗi phần tử: {type, x, y, font, color, bind, w, h} - x/y/w/h theo ĐÚNG
@@ -1465,12 +1477,15 @@
     const now = new Date();
     const pad = (n) => String(n).padStart(2,"0");
     const wdayFull = ["Chủ nhật","Thứ hai","Thứ ba","Thứ tư","Thứ năm","Thứ sáu","Thứ bảy"][now.getDay()];
+    const wdayShort = ["CN","T2","T3","T4","T5","T6","T7"][now.getDay()];
     switch(bind){
       case 0: return `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-      case 1: return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      case 10: return `${pad(now.getHours())}`;
+      case 11: return `${pad(now.getMinutes())}`;
       case 2: return `${pad(now.getDate())}/${pad(now.getMonth()+1)}`;
       case 3: return `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`;
       case 4: return wdayFull;
+      case 9: return wdayShort;
       case 5: return `${pad(now.getDate())}/${pad(now.getMonth()+1)} (âm)`;
       case 6: return `${now.getFullYear()}`;
       case 7: return `${pad(now.getDate())}`;
@@ -1491,6 +1506,43 @@
   function layoutColorCss(c){ return c===0 ? "#111" : c===1 ? "#fff" : "#c81e1e"; }
 
   // ---------------- Vẽ lại toàn bộ khung thiết kế (stage) ----------------
+  // Xem trước lưới lịch tháng (type=4) - dùng NGÀY THẬT của máy tính đang
+  // mở trang (giống cách chữ động cũng dùng giờ máy tính), chỉ mang tính
+  // tham khảo bố cục - firmware sẽ tự tính lại đúng theo tháng đang chạy
+  // trên thiết bị.
+  function layoutCalendarInnerHTML(el, zoom){
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth(), today = now.getDate();
+    const daysInMonth = new Date(y, m+1, 0).getDate();
+    const firstDow = new Date(y, m, 1).getDay();
+    const firstCol = firstDow===0 ? 6 : firstDow-1;
+    const wd = ["T2","T3","T4","T5","T6","T7","CN"];
+    const fs = Math.max(6, Math.round(el.w*zoom/7*0.32));
+    let html = `<div style="display:grid; grid-template-columns:repeat(7,1fr); width:100%; height:100%; font-size:${fs}px; font-family:var(--font-mono);">`;
+    wd.forEach(w => { html += `<div style="background:#111;color:#fff;text-align:center;overflow:hidden;">${w}</div>`; });
+    for(let i=0;i<firstCol;i++) html += '<div></div>';
+    for(let d=1; d<=daysInMonth; d++){
+      const isToday = (d===today);
+      html += `<div style="text-align:center;overflow:hidden;${isToday?'background:#111;color:#fff;':'color:#111;'}">${d}</div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  // Xem trước đồng hồ kim (type=5) - kim giờ/phút xoay theo giờ THẬT của
+  // máy tính, minh hoạ đúng tinh thần draw_analog_clock() bên firmware.
+  function layoutClockInnerHTML(el, zoom){
+    const now = new Date();
+    const h = now.getHours()%12, m = now.getMinutes();
+    const minDeg = m*6;
+    const hourDeg = h*30 + m*0.5;
+    const r = el.w*zoom;
+    return `<div style="position:relative; width:100%; height:100%; border-radius:50%; border:2px solid #111; box-sizing:border-box; background:#fff;">
+      <div style="position:absolute; left:50%; top:50%; width:2px; height:${Math.round(r*0.55)}px; background:#111; transform-origin:top center; transform:translateX(-50%) rotate(${hourDeg}deg);"></div>
+      <div style="position:absolute; left:50%; top:50%; width:2px; height:${Math.round(r*0.8)}px; background:#111; transform-origin:top center; transform:translateX(-50%) rotate(${minDeg}deg);"></div>
+    </div>`;
+  }
+
   function renderLayoutStage(){
     const zoom = layoutZoom();
     const stage = $("layoutStage");
@@ -1500,10 +1552,20 @@
 
     layoutElements.forEach((el, idx) => {
       const div = document.createElement("div");
-      div.className = "layout-el " + (el.type===1 ? "el-text" : el.type===2 ? "el-box-solid" : "el-box-outline");
+      const typeClass = el.type===1 ? "el-text" : el.type===2 ? "el-box-solid" : el.type===3 ? "el-box-outline" : "el-plain";
+      div.className = "layout-el " + typeClass;
       if(idx===layoutSelected) div.classList.add("selected");
-      div.style.left = (el.x*zoom)+"px";
-      div.style.top  = (el.y*zoom)+"px";
+      // QUAN TRỌNG: type=5 (đồng hồ kim) dùng x,y làm TÂM (khớp đúng tham
+      // số draw_analog_clock(cx,cy,r) bên firmware) - khác với mọi loại
+      // khác dùng x,y làm góc trên-trái. Phải quy đổi riêng khi đặt vị
+      // trí div trên khung.
+      if(el.type===5){
+        div.style.left = ((el.x-el.w)*zoom)+"px";
+        div.style.top  = ((el.y-el.w)*zoom)+"px";
+      }else{
+        div.style.left = (el.x*zoom)+"px";
+        div.style.top  = (el.y*zoom)+"px";
+      }
       div.style.setProperty("--el-color", layoutColorCss(el.color));
 
       if(el.type===1){
@@ -1524,6 +1586,15 @@
         div.style.width = (tb.w*zoom)+"px";
         div.style.height = (tb.h*zoom)+"px";
         div.style.overflow = "hidden";
+      }else if(el.type===4){
+        div.style.width = (el.w*zoom)+"px";
+        div.style.height = (el.h*zoom)+"px";
+        div.style.overflow = "hidden";
+        div.innerHTML = layoutCalendarInnerHTML(el, zoom);
+      }else if(el.type===5){
+        div.style.width = (el.w*2*zoom)+"px";
+        div.style.height = (el.w*2*zoom)+"px";
+        div.innerHTML = layoutClockInnerHTML(el, zoom);
       }else{
         div.style.width = (el.w*zoom)+"px";
         div.style.height = (el.h*zoom)+"px";
@@ -1579,11 +1650,23 @@
     const el = layoutElements[layoutDrag.idx];
     const dxDev = Math.round(dxPx/layoutDrag.zoom);
     const dyDev = Math.round(dyPx/layoutDrag.zoom);
-    const bounds = el.type===1 ? layoutTextBounds(el) : {w: el.w, h: el.h};
-    const maxX = Math.max(0, LAYOUT_DEVICE_W - bounds.w);
-    const maxY = Math.max(0, LAYOUT_DEVICE_H - bounds.h);
-    el.x = layoutClamp(layoutDrag.elStartX+dxDev, 0, maxX);
-    el.y = layoutClamp(layoutDrag.elStartY+dyDev, 0, maxY);
+
+    if(el.type===5){
+      // Đồng hồ kim: x,y là TÂM, không phải góc trên-trái - giới hạn khác
+      // hẳn (tâm phải cách mép ít nhất đúng 1 bán kính để hình tròn không
+      // bị cắt).
+      const r = el.w;
+      const minX = r, maxX = Math.max(r, LAYOUT_DEVICE_W-r);
+      const minY = r, maxY = Math.max(r, LAYOUT_DEVICE_H-r);
+      el.x = layoutClamp(layoutDrag.elStartX+dxDev, minX, maxX);
+      el.y = layoutClamp(layoutDrag.elStartY+dyDev, minY, maxY);
+    }else{
+      const bounds = el.type===1 ? layoutTextBounds(el) : {w: el.w, h: el.h};
+      const maxX = Math.max(0, LAYOUT_DEVICE_W - bounds.w);
+      const maxY = Math.max(0, LAYOUT_DEVICE_H - bounds.h);
+      el.x = layoutClamp(layoutDrag.elStartX+dxDev, 0, maxX);
+      el.y = layoutClamp(layoutDrag.elStartY+dyDev, 0, maxY);
+    }
     renderLayoutStage();
   }
 
@@ -1639,6 +1722,33 @@
       `;
       $("propFont").addEventListener("change", (e) => { el.font = parseInt(e.target.value,10); renderLayoutProps(); renderLayoutStage(); });
       $("propBind").addEventListener("change", (e) => { el.bind = parseInt(e.target.value,10); renderLayoutStage(); });
+    }else if(el.type===4){
+      panel.innerHTML = `
+        <label class="lf">Cỡ chữ ngày
+          <select id="propFont">${layoutOptionsHtml(LAYOUT_FONTS.filter(o=>!isSevenSegmentFont(o.value)), el.font)}</select>
+        </label>
+        <label class="lf">Rộng <input type="number" id="propW" min="40" max="255" value="${el.w}"></label>
+        <label class="lf">Cao <input type="number" id="propH" min="24" max="255" value="${el.h}"></label>
+        <label class="lf">Màu
+          <select id="propColor">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select>
+        </label>
+        <span style="font-size:10px; color:var(--ink-faint); max-width:150px;">Lịch thật tự tính đúng tháng/ngày hôm nay đang chạy trên thiết bị - không phải ảnh tĩnh.</span>
+        <button class="btnDel small">Xoá phần tử</button>
+      `;
+      $("propFont").addEventListener("change", (e) => { el.font = parseInt(e.target.value,10); renderLayoutStage(); });
+      $("propW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||40,40,255); renderLayoutStage(); });
+      $("propH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||24,24,255); renderLayoutStage(); });
+    }else if(el.type===5){
+      panel.innerHTML = `
+        <label class="lf">Bán kính <input type="number" id="propRadius" min="10" max="50" value="${el.w}"></label>
+        <span style="font-size:10px; color:var(--ink-faint); max-width:150px;">Kim đồng hồ luôn màu đen (firmware chưa hỗ trợ đổi màu cho mục này).</span>
+        <button class="btnDel small">Xoá phần tử</button>
+      `;
+      $("propRadius").addEventListener("input", (e) => {
+        const r = layoutClamp(parseInt(e.target.value,10)||10,10,50);
+        el.w = r; el.h = r;
+        renderLayoutStage();
+      });
     }else{
       panel.innerHTML = `
         <label class="lf">Loại
@@ -1658,7 +1768,9 @@
       $("propW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||1,1,255); renderLayoutStage(); });
       $("propH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||1,1,255); renderLayoutStage(); });
     }
-    $("propColor").addEventListener("change", (e) => { el.color = parseInt(e.target.value,10); renderLayoutStage(); });
+    if($("propColor")){
+      $("propColor").addEventListener("change", (e) => { el.color = parseInt(e.target.value,10); renderLayoutStage(); });
+    }
     panel.querySelector(".btnDel").addEventListener("click", () => {
       layoutElements.splice(layoutSelected, 1);
       layoutSelected = -1;
@@ -1673,14 +1785,30 @@
 
   // ---------------- Thêm phần tử ----------------
   $("btnAddText").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log("Đã đạt tối đa 8 phần tử.", "err"); return; }
+    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
     layoutElements.push({ type:1, x:4, y:4, font:2, color:0, bind:0, w:0, h:0 });
     layoutSelected = layoutElements.length-1;
     renderLayoutStage();
   });
 
+  // Prompt kích thước dùng chung cho "Thêm khung" (type=2) VÀ "Lịch tháng
+  // thật" (type=4) - cả 2 đều cần Rộng/Cao trước khi tạo, chỉ khác type
+  // được gán. layoutSizePromptType nhớ đang tạo loại nào.
+  let layoutSizePromptType = 2;
+
   $("btnAddBox").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log("Đã đạt tối đa 8 phần tử.", "err"); return; }
+    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
+    layoutSizePromptType = 2;
+    $("boxSizeW").value = 60; $("boxSizeH").value = 30;
+    $("layoutBoxSizePrompt").style.display = "flex";
+  });
+  $("btnAddCalendar").addEventListener("click", () => {
+    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
+    layoutSizePromptType = 4;
+    // Lịch tháng cần đủ chỗ cho lưới 7 cột x tối đa 6 hàng - mặc định
+    // gợi ý cỡ lớn hơn hẳn khung thường.
+    $("boxSizeW").value = Math.min(150, LAYOUT_DEVICE_W-8);
+    $("boxSizeH").value = Math.min(80, LAYOUT_DEVICE_H-8);
     $("layoutBoxSizePrompt").style.display = "flex";
   });
   $("btnBoxSizeCancel").addEventListener("click", () => {
@@ -1689,9 +1817,31 @@
   $("btnBoxSizeOk").addEventListener("click", () => {
     const w = layoutClamp(parseInt($("boxSizeW").value,10)||20, 4, 255);
     const h = layoutClamp(parseInt($("boxSizeH").value,10)||20, 4, 255);
-    layoutElements.push({ type:2, x:4, y:4, font:0, color:0, bind:0, w, h });
+    // Lịch tháng mặc định font 0 (nhỏ, vừa đủ số ngày trong ô hẹp) và màu
+    // đen; khung thường giữ mặc định cũ.
+    const font = layoutSizePromptType===4 ? 0 : 0;
+    layoutElements.push({ type:layoutSizePromptType, x:4, y:4, font, color:0, bind:0, w, h });
     layoutSelected = layoutElements.length-1;
     $("layoutBoxSizePrompt").style.display = "none";
+    renderLayoutStage();
+  });
+
+  // Đồng hồ kim - chỉ cần 1 số duy nhất (bán kính). x/y (tâm) đặt mặc
+  // định rồi kéo-thả như mọi phần tử khác. w lưu bán kính, h để dự phòng
+  // (không dùng tới - draw_analog_clock() firmware chỉ nhận đúng 1 bán
+  // kính từ w).
+  $("btnAddClock").addEventListener("click", () => {
+    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
+    $("layoutClockSizePrompt").style.display = "flex";
+  });
+  $("btnClockSizeCancel").addEventListener("click", () => {
+    $("layoutClockSizePrompt").style.display = "none";
+  });
+  $("btnClockSizeOk").addEventListener("click", () => {
+    const r = layoutClamp(parseInt($("clockRadius").value,10)||35, 10, 50);
+    layoutElements.push({ type:5, x:r+4, y:r+4, font:0, color:0, bind:0, w:r, h:r });
+    layoutSelected = layoutElements.length-1;
+    $("layoutClockSizePrompt").style.display = "none";
     renderLayoutStage();
   });
 
@@ -1700,14 +1850,14 @@
   // nếu chỉ cần 1 đường kẻ phân cách đơn giản. Sau khi thêm vẫn kéo-thả
   // và chỉnh Rộng/Cao lại bình thường qua bảng thuộc tính như mọi khung.
   $("btnAddHBar").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log("Đã đạt tối đa 8 phần tử.", "err"); return; }
+    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
     const w = Math.min(100, Math.max(4, LAYOUT_DEVICE_W-8));
     layoutElements.push({ type:2, x:4, y:4, font:0, color:0, bind:0, w, h:3 });
     layoutSelected = layoutElements.length-1;
     renderLayoutStage();
   });
   $("btnAddVBar").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log("Đã đạt tối đa 8 phần tử.", "err"); return; }
+    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
     const h = Math.min(60, Math.max(4, LAYOUT_DEVICE_H-8));
     layoutElements.push({ type:2, x:4, y:4, font:0, color:0, bind:0, w:3, h });
     layoutSelected = layoutElements.length-1;
