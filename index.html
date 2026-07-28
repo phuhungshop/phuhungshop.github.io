@@ -674,10 +674,26 @@
       // từng gây lỗi như bản 212×104), khớp với IMGD_CHUNK_SIZE trong
       // user_custs1_impl.c của firmware dự án này.
       chunkSize: 17,
-      // Cùng dòng firmware/font với bản 212×104 (cùng font_list[]) - dùng
-      // chung số liệu cỡ chữ đã hiệu chỉnh.
-      layoutFontPx: { 0:12, 1:50, 2:18, 3:66 },
-      layoutCharWidthRatio: { 0:0.58, 1:0.77, 2:0.58, 3:0.77 },
+      // ĐÃ SỬA (trước đó dùng NHẦM số liệu copy từ bản 212×104, không
+      // đúng font thật của dự án này): đo trực tiếp từ file font thật
+      // trong firmware (sfont.h, font50.h, sfont16.h, font66.h) bằng
+      // cách đọc header từng ký tự bitmap - lấy chữ số '0'-'9' làm chuẩn
+      // (đây là nội dung các font này hiển thị nhiều nhất: giờ/ngày/
+      // tháng/năm). Kết quả đo được (bw=chiều rộng, bh=chiều cao, đơn vị
+      // px thật):
+      //   font 0 (sfont)     : bh=10, bw=10  -> tỉ lệ rộng/cao = 1.00
+      //   font 1 (F_DSEG7_50): bh=50, bw=41  -> tỉ lệ rộng/cao = 0.82
+      //   font 2 (sfont16)   : bh=12, bw=11  -> tỉ lệ rộng/cao = 0.92
+      //   font 3 (F_DSEG7_66): bh=66, bw=54  -> tỉ lệ rộng/cao = 0.82
+      // Số liệu cũ (12/50/18/66, tỉ lệ 0.58/0.77/0.58/0.77) ước lượng
+      // chữ HẸP và THẤP hơn thật khá nhiều, đặc biệt font 0 và font 2 -
+      // khiến khung xem trước trên web luôn còn dư chỗ trống nhiều hơn
+      // thật, người dùng đặt các phần tử sát nhau hơn mức máy thật cho
+      // phép -> lên màn hình thật bị tràn/đè lên nhau, đúng như hiện
+      // tượng bạn mô tả ("kích thước thực tế có vẻ nhỏ hơn, giống độ
+      // phân giải 212×104").
+      layoutFontPx: { 0:10, 1:50, 2:12, 3:66 },
+      layoutCharWidthRatio: { 0:1.00, 1:0.82, 2:0.92, 3:0.82 },
       layoutHasClock: true,
     },
   };
@@ -1022,11 +1038,6 @@
     const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
     let dw, dh, dx, dy;
     if(mode === "stretch"){
-      // Co giãn RIÊNG theo từng chiều (không giữ tỉ lệ gốc) để lấp đầy
-      // ĐÚNG khung - không cắt bớt (như cover), không viền trắng (như
-      // contain). Đánh đổi: ảnh có thể hơi méo nếu tỉ lệ khung khác tỉ
-      // lệ ảnh gốc, nhưng giữ lại 100% nội dung ảnh, không mất chi tiết
-      // nào ở rìa.
       dw = IMG_W; dh = IMG_H; dx = 0; dy = 0;
     }else{
       const scaleCover = Math.max(IMG_W/iw, IMG_H/ih);
@@ -1241,13 +1252,6 @@
       }
     }
 
-    // Đóng gói: màn có đỏ thì 2 lớp (đen-trắng + đỏ) nối liền nhau;
-    // màn đen-trắng thuần chỉ có đúng 1 lớp. MỖI HÀNG ĐỆM TRÒN BYTE
-    // (IMG_LINE_BYTES = ceil(IMG_W/8) byte/hàng) - khớp ĐÚNG quy ước
-    // imgd_start()/imgd_chunk() bên firmware. Với chiều rộng không chia
-    // hết 8 (VD 212), vài bit cuối mỗi hàng KHÔNG dùng tới - để mặc định
-    // 0, firmware tự bỏ qua các bit thừa này (xem "if(x>=imgd_w) continue"
-    // trong imgd_chunk()) nên giá trị đệm không ảnh hưởng gì tới ảnh hiện.
     const bwPlane = new Uint8Array(IMG_PLANE_LEN);
     const redPlane = currentDevice.hasRed ? new Uint8Array(IMG_PLANE_LEN) : null;
     for(let y=0; y<IMG_H; y++){
@@ -1255,7 +1259,7 @@
         let bwByte = 0, redByte = 0;
         for(let b=0; b<8; b++){
           const x = xByte*8+b;
-          if(x>=IMG_W) continue; // bit đệm cuối hàng - bỏ qua, không đọc lạc sang hàng kế
+          if(x>=IMG_W) continue;
           const c = classify[y*IMG_W+x];
           const bwBit = (c===1) ? 0 : 1;
           bwByte |= (bwBit<<(7-b));
@@ -1394,21 +1398,10 @@
       await writeWithRetry(startBuf, 3);
       log(`Đã gửi lệnh bắt đầu (0x96) cho màn ${currentDevice.label} - thiết bị đang mở phiên ghi màn hình…`);
 
-      // CHẨN ĐOÁN: checksum cộng dồn toàn bộ byte SẼ gửi (trước khi gửi),
-      // dùng ĐÚNG công thức cộng dồn u32 y hệt firmware (imgd_checksum
-      // trong user_custs1_impl.c). Sau khi gửi xong, so số này với dòng
-      // "IMG done: ... checksum=..." trong log UART của firmware:
-      //   - Khớp nhau -> byte nhận đúng 100%, lỗi nằm ở khâu vẽ trong
-      //     firmware (row/col/x/y hoặc draw_pixel), không phải BLE.
-      //   - Khác nhau -> byte bị sai/thiếu ngay khi truyền qua Bluetooth.
       let checksum = 0;
       for(let k=0; k<packedImage.length; k++){ checksum = (checksum + packedImage[k]) >>> 0; }
       log(`Checksum dữ liệu SẼ gửi: ${checksum.toString(16).padStart(8,'0')} (đối chiếu với dòng "IMG done" trong log UART firmware)`);
 
-      // Kích thước gói PHẢI khớp đúng IMGD_CHUNK_SIZE của đúng firmware
-      // đang chọn (xem chunkSize trong DEVICES ở trên) - 2 firmware hiện
-      // đang dùng 2 con số khác nhau (42: 128, 213: 17), không được dùng
-      // chung 1 hằng số cho cả 2 thiết bị.
       const chunkSize = currentDevice.chunkSize;
       const totalChunks = Math.ceil(IMG_DATA_LEN/chunkSize);
       for(let i=0; i<totalChunks; i++){
@@ -1438,20 +1431,7 @@
 
   // =================================================================
   // GIAO DIỆN TUỲ CHỈNH THEO LAYOUT (đang test) - kéo thả trực quan
-  // Khớp ĐÚNG định dạng 8 byte/phần tử trong layout_start()/layout_chunk()
-  // của firmware (user_custs1_impl.c, dự án 2.13" 212×104):
-  //   [type, x, y, font, color, bind, w, h]
-  // type: 1=chữ động, 2=hình chữ nhật đặc, 3=hình chữ nhật viền
-  // Lệnh 0x98 (bắt đầu, gửi số lượng phần tử) + 0x99 (từng gói dữ liệu) -
-  // dùng lại nguyên xi cơ chế truyền gói nhỏ đã ổn định của tính năng ảnh.
-  //
-  // Đã tăng từ 8 lên 16 phần tử tối đa, khớp firmware sau khi giải phóng
-  // thêm RAM (xem CFG_RET_DATA_SIZE trong da14585_config_advanced.h).
   // =================================================================
-  // ĐÃ GỘP: khung thiết kế layout giờ dùng CHUNG IMG_W/IMG_H với mục "Tải
-  // ảnh cá nhân" phía trên (cùng 1 bộ chọn thiết bị cho cả 2 tính năng) -
-  // cả 3 màn hình (4.2", 212×104, 250×122) đều đã có tính năng layout ở
-  // firmware, không còn giới hạn chỉ 212×104 như trước.
   const LAYOUT_MAX_ELEMENTS = 16;
   const LAYOUT_ELEM_SIZE = 8;
   const LAYOUT_CHUNK_SIZE = 17;
@@ -1480,25 +1460,15 @@
     { value: 7, label: "Ngày (số)" },
     { value: 8, label: "Tháng (số)" },
   ];
-  // Font 1 và 3 là font "7 đoạn" CHỈ CÓ CHỮ SỐ (dùng cho hiển thị giờ lớn
-  // kiểu đồng hồ điện tử) - không có dấu ":" "/" hay chữ tiếng Việt có dấu.
-  // Chọn nhầm nội dung có ký tự không có trong font này từng gây crash
-  // firmware thật (đã sửa ở firmware, nhưng vẫn lọc luôn ở đây cho chắc -
-  // 2 lớp bảo vệ tốt hơn 1) - 6/7/8 (Năm/Ngày/Tháng) và 10/11 (Giờ/Phút
-  // riêng) đều là số thuần, an toàn với font 7 đoạn.
   const LAYOUT_BIND_NUMERIC_ONLY = [6, 7, 8, 10, 11];
   function isSevenSegmentFont(font){ return font===1 || font===3; }
 
-  // Mỗi phần tử: {type, x, y, font, color, bind, w, h} - x/y/w/h theo ĐÚNG
-  // pixel thiết bị thật (0-255), không phải pixel màn hình máy tính.
   let layoutElements = [
     { type:1, x:4, y:4, font:2, color:0, bind:0, w:0, h:0 },
     { type:1, x:4, y:40, font:0, color:0, bind:3, w:0, h:0 },
   ];
-  let layoutSelected = -1; // chỉ số phần tử đang chọn, -1 = chưa chọn gì
+  let layoutSelected = -1;
 
-  // Độ phóng to khung thiết kế (px web / px thiết bị) - màn càng nhỏ thì
-  // phóng càng to để dễ kéo-thả bằng ngón tay/chuột.
   function layoutZoom(){
     if(IMG_W<=130) return 4;
     if(IMG_W<=260) return 3;
@@ -1507,9 +1477,6 @@
 
   function layoutClamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
-  // Xem trước GẦN ĐÚNG nội dung chữ động - không dùng font thật của
-  // firmware (web không có sẵn font bitmap đó). Giờ lấy theo máy tính
-  // đang mở trang, không phải giờ thiết bị.
   function layoutBindPreviewText(bind){
     const now = new Date();
     const pad = (n) => String(n).padStart(2,"0");
@@ -1531,16 +1498,8 @@
     }
   }
 
-  // Cỡ chữ THẬT (px) giờ lấy theo TỪNG THIẾT BỊ (currentDevice.layoutFontPx)
-  // - dự án 4.2" dùng bảng font hoàn toàn khác 2 bản 2.13" (xem DEVICES ở
-  // trên), không thể dùng chung 1 bảng cố định nữa.
   function layoutColorCss(c){ return c===0 ? "#111" : c===1 ? "#fff" : "#c81e1e"; }
 
-  // ---------------- Vẽ lại toàn bộ khung thiết kế (stage) ----------------
-  // Xem trước lưới lịch tháng (type=4) - dùng NGÀY THẬT của máy tính đang
-  // mở trang (giống cách chữ động cũng dùng giờ máy tính), chỉ mang tính
-  // tham khảo bố cục - firmware sẽ tự tính lại đúng theo tháng đang chạy
-  // trên thiết bị.
   function layoutCalendarInnerHTML(el, zoom){
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth(), today = now.getDate();
@@ -1560,8 +1519,6 @@
     return html;
   }
 
-  // Xem trước đồng hồ kim (type=5) - kim giờ/phút xoay theo giờ THẬT của
-  // máy tính, minh hoạ đúng tinh thần draw_analog_clock() bên firmware.
   function layoutClockInnerHTML(el, zoom){
     const now = new Date();
     const h = now.getHours()%12, m = now.getMinutes();
@@ -1586,10 +1543,6 @@
       const typeClass = el.type===1 ? "el-text" : el.type===2 ? "el-box-solid" : el.type===3 ? "el-box-outline" : "el-plain";
       div.className = "layout-el " + typeClass;
       if(idx===layoutSelected) div.classList.add("selected");
-      // QUAN TRỌNG: type=5 (đồng hồ kim) dùng x,y làm TÂM (khớp đúng tham
-      // số draw_analog_clock(cx,cy,r) bên firmware) - khác với mọi loại
-      // khác dùng x,y làm góc trên-trái. Phải quy đổi riêng khi đặt vị
-      // trí div trên khung.
       if(el.type===5){
         div.style.left = ((el.x-el.w)*zoom)+"px";
         div.style.top  = ((el.y-el.w)*zoom)+"px";
@@ -1605,15 +1558,8 @@
         div.style.fontSize = (currentDevice.layoutFontPx[el.font]*zoom)+"px";
         div.style.fontWeight = el.font>=1 ? "700" : "400";
         div.style.color = layoutColorCss(el.color);
-        div.style.background = el.color===1 ? "#333" : "transparent"; // chữ trắng cần nền tối mới thấy trên web
+        div.style.background = el.color===1 ? "#333" : "transparent";
         div.style.padding = "1px 3px";
-        // QUAN TRỌNG: đặt CỨNG chiều rộng/cao theo đúng tính toán đã hiệu
-        // chỉnh (layoutTextBounds), KHÔNG để trình duyệt tự do quyết định
-        // theo font hệ thống của nó - font hệ thống có thể rộng/hẹp khác
-        // hẳn font thật trên thiết bị, gây lệch tỉ lệ như đã gặp. Cắt bớt
-        // phần chữ tràn ra ngoài khung tính toán (overflow:hidden) để ô
-        // luôn đúng đúng kích thước đã tính, dùng cho cả kéo-thả lẫn hiển
-        // thị.
         div.style.width = (tb.w*zoom)+"px";
         div.style.height = (tb.h*zoom)+"px";
         div.style.overflow = "hidden";
@@ -1640,8 +1586,7 @@
     renderLayoutProps();
   }
 
-  // ---------------- Kéo-thả bằng Pointer Events (chuột + cảm ứng) ----------------
-  let layoutDrag = null; // {idx, startX, startY, elStartX, elStartY, moved}
+  let layoutDrag = null;
 
   function layoutStartDrag(e, idx){
     e.preventDefault();
@@ -1658,13 +1603,6 @@
     window.addEventListener("pointerup", layoutEndDrag);
   }
 
-  // Ước lượng kích thước (px thiết bị) của 1 phần tử chữ động - dùng cỡ
-  // chữ THẬT theo TỪNG THIẾT BỊ (currentDevice.layoutFontPx) nhân với số
-  // ký tự. Tỉ lệ rộng/cao mỗi ký tự KHÁC NHAU rõ rệt giữa font kiểu số (to,
-  // gần vuông) và font chữ thường (hẹp hơn) - đã HIỆU CHỈNH theo đúng ảnh
-  // chụp màn hình thật cho 2 bản 2.13" (chữ "2026" font 7 đoạn to chiếm
-  // gần hết 212px cho 4 ký tự => tỉ lệ ~0.77); bản 4.2" dùng số ước lượng
-  // riêng (xem DEVICES) do chưa có ảnh thật để hiệu chỉnh.
   function layoutTextBounds(el){
     const text = layoutBindPreviewText(el.bind);
     const fh = currentDevice.layoutFontPx[el.font];
@@ -1683,9 +1621,6 @@
     const dyDev = Math.round(dyPx/layoutDrag.zoom);
 
     if(el.type===5){
-      // Đồng hồ kim: x,y là TÂM, không phải góc trên-trái - giới hạn khác
-      // hẳn (tâm phải cách mép ít nhất đúng 1 bán kính để hình tròn không
-      // bị cắt).
       const r = el.w;
       const minX = r, maxX = Math.max(r, IMG_W-r);
       const minY = r, maxY = Math.max(r, IMG_H-r);
@@ -1707,13 +1642,10 @@
     window.removeEventListener("pointermove", layoutOnDrag);
     window.removeEventListener("pointerup", layoutEndDrag);
     layoutDrag = null;
-    // Chỉ coi là "chọn" nếu không kéo đi đâu cả (bấm đơn thuần) - kéo thả
-    // xong vẫn chọn luôn phần tử đó để tiện chỉnh tiếp.
     layoutSelected = idx;
     renderLayoutStage();
   }
 
-  // ---------------- Bảng thuộc tính của phần tử đang chọn ----------------
   function layoutOptionsHtml(opts, selected){
     return opts.map(o => `<option value="${o.value}"${o.value===selected?" selected":""}>${o.label}</option>`).join("");
   }
@@ -1729,9 +1661,6 @@
     panel.style.display = "flex";
 
     if(el.type===1){
-      // Nếu đang chọn font 7 đoạn nhưng nội dung hiện tại có ký tự font
-      // đó không có (":" "/" hoặc chữ có dấu) - tự đổi về nội dung an
-      // toàn gần nhất, tránh gửi xuống tổ hợp có thể gây lỗi hiển thị.
       if(isSevenSegmentFont(el.font) && !LAYOUT_BIND_NUMERIC_ONLY.includes(el.bind)){
         el.bind = LAYOUT_BIND_NUMERIC_ONLY[0];
       }
@@ -1809,12 +1738,10 @@
     });
   }
 
-  // Bấm khoảng trống trong khung (không trúng phần tử nào) -> bỏ chọn
   $("layoutStage").addEventListener("pointerdown", (e) => {
     if(e.target.id==="layoutStage"){ layoutSelected = -1; renderLayoutStage(); }
   });
 
-  // ---------------- Thêm phần tử ----------------
   $("btnAddText").addEventListener("click", () => {
     if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
     layoutElements.push({ type:1, x:4, y:4, font:2, color:0, bind:0, w:0, h:0 });
@@ -1822,9 +1749,6 @@
     renderLayoutStage();
   });
 
-  // Prompt kích thước dùng chung cho "Thêm khung" (type=2) VÀ "Lịch tháng
-  // thật" (type=4) - cả 2 đều cần Rộng/Cao trước khi tạo, chỉ khác type
-  // được gán. layoutSizePromptType nhớ đang tạo loại nào.
   let layoutSizePromptType = 2;
 
   $("btnAddBox").addEventListener("click", () => {
@@ -1836,8 +1760,6 @@
   $("btnAddCalendar").addEventListener("click", () => {
     if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
     layoutSizePromptType = 4;
-    // Lịch tháng cần đủ chỗ cho lưới 7 cột x tối đa 6 hàng - mặc định
-    // gợi ý cỡ lớn hơn hẳn khung thường.
     $("boxSizeW").value = Math.min(150, IMG_W-8);
     $("boxSizeH").value = Math.min(80, IMG_H-8);
     $("layoutBoxSizePrompt").style.display = "flex";
@@ -1848,8 +1770,6 @@
   $("btnBoxSizeOk").addEventListener("click", () => {
     const w = layoutClamp(parseInt($("boxSizeW").value,10)||20, 4, 255);
     const h = layoutClamp(parseInt($("boxSizeH").value,10)||20, 4, 255);
-    // Lịch tháng mặc định font 0 (nhỏ, vừa đủ số ngày trong ô hẹp) và màu
-    // đen; khung thường giữ mặc định cũ.
     const font = layoutSizePromptType===4 ? 0 : 0;
     layoutElements.push({ type:layoutSizePromptType, x:4, y:4, font, color:0, bind:0, w, h });
     layoutSelected = layoutElements.length-1;
@@ -1857,10 +1777,6 @@
     renderLayoutStage();
   });
 
-  // Đồng hồ kim - chỉ cần 1 số duy nhất (bán kính). x/y (tâm) đặt mặc
-  // định rồi kéo-thả như mọi phần tử khác. w lưu bán kính, h để dự phòng
-  // (không dùng tới - draw_analog_clock() firmware chỉ nhận đúng 1 bán
-  // kính từ w).
   $("btnAddClock").addEventListener("click", () => {
     if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
     $("layoutClockSizePrompt").style.display = "flex";
@@ -1876,10 +1792,6 @@
     renderLayoutStage();
   });
 
-  // Thanh ngang/dọc - thực chất là khung đặc (type=2) với kích thước dựng
-  // sẵn hợp lý (mảnh 1 chiều) - tiện hơn hẳn việc tự gõ Rộng/Cao thủ công
-  // nếu chỉ cần 1 đường kẻ phân cách đơn giản. Sau khi thêm vẫn kéo-thả
-  // và chỉnh Rộng/Cao lại bình thường qua bảng thuộc tính như mọi khung.
   $("btnAddHBar").addEventListener("click", () => {
     if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
     const w = Math.min(100, Math.max(4, IMG_W-8));
@@ -1899,7 +1811,6 @@
     $("btnLayoutSend").disabled = !(device && device.gatt && device.gatt.connected && layoutElements.length>0);
   }
 
-  // ---------------- Đóng gói + gửi ----------------
   function packLayoutElements(){
     const buf = new Uint8Array(layoutElements.length*LAYOUT_ELEM_SIZE);
     layoutElements.forEach((el, idx) => {
@@ -1928,8 +1839,6 @@
       const packed = packLayoutElements();
       const count = layoutElements.length;
 
-      // Lệnh 0x98: [0x98, count] - khớp đúng layout_start() trong firmware
-      // (chỉ đọc val[1] làm số lượng phần tử, không cần gửi thêm gì khác).
       await writeWithRetry(new Uint8Array([0x98, count]), 3);
       log(`Đã gửi lệnh bắt đầu (0x98) - ${count} phần tử...`);
 
@@ -1959,11 +1868,6 @@
 
   $("btnLayoutSend").addEventListener("click", sendLayout);
 
-  // QUAN TRỌNG: KHÔNG dùng renderLayoutStage() (vẽ lại TOÀN BỘ, kể cả bảng
-  // thuộc tính) cho việc chạy giờ mỗi giây - làm vậy sẽ xoá mất bảng thuộc
-  // tính đúng lúc người dùng đang bấm chọn (dropdown vừa mở đã bị dựng lại
-  // từ đầu, chọn gì cũng như mất). Chỉ cập nhật NỘI DUNG chữ động, không
-  // đụng gì tới DOM khác (bảng thuộc tính, phần tử đang kéo...).
   function tickLayoutClockText(){
     const divs = $("layoutStage").children;
     layoutElements.forEach((el, idx) => {
@@ -1973,11 +1877,6 @@
     });
   }
 
-  // ---------------- Lưu / tải thiết kế ra file .json trên máy tính ----------------
-  // Lưu THẲNG danh sách layoutElements (chưa đóng gói nhị phân) - dễ đọc,
-  // dễ sửa tay nếu cần, và không phụ thuộc phiên bản đóng gói nhị phân có
-  // thể thay đổi sau này. Khi tải lại, đóng gói lại như bình thường lúc
-  // gửi xuống thiết bị.
   function saveLayoutDesign(){
     const name = ($("layoutSaveName").value || "thiet-ke-dong-ho").trim().replace(/[^a-zA-Z0-9-_]/g, "-");
     const data = {
@@ -2006,9 +1905,6 @@
         const elements = Array.isArray(data) ? data : data.elements;
         if(!Array.isArray(elements)) throw new Error("File không đúng định dạng (thiếu danh sách phần tử).");
 
-        // Kiểm tra + dọn lại từng phần tử cho chắc chắn - phòng file bị
-        // sửa tay sai hoặc từ phiên bản cũ hơn, tránh đưa dữ liệu rác vào
-        // layoutElements.
         const cleaned = elements.slice(0, LAYOUT_MAX_ELEMENTS).map((el) => ({
           type:  layoutClamp(parseInt(el.type,10)  || 0, 0, 5),
           x:     layoutClamp(parseInt(el.x,10)     || 0, 0, 255),
@@ -2039,7 +1935,7 @@
   $("btnLayoutLoad").addEventListener("click", () => $("layoutLoadInput").click());
   $("layoutLoadInput").addEventListener("change", (e) => {
     if(e.target.files[0]) loadLayoutDesignFromFile(e.target.files[0]);
-    e.target.value = ""; // cho phép chọn lại đúng file đó lần nữa nếu cần
+    e.target.value = "";
   });
 
   renderLayoutStage();
@@ -2060,7 +1956,6 @@
   $("btnCal").addEventListener("click", calibrate);
   $("btnSend").addEventListener("click", sendImage);
 
-  // Khởi tạo canvas + trạng thái ban đầu theo thiết bị mặc định (4.2")
   $("canvasOrig").width = IMG_W; $("canvasOrig").height = IMG_H;
   $("canvasDither").width = IMG_W; $("canvasDither").height = IMG_H;
   $("btnAddClock").style.display = currentDevice.layoutHasClock ? "" : "none";
