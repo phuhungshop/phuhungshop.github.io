@@ -1455,10 +1455,12 @@
     { value: 3, label: "Ngày/Tháng/Năm" },
     { value: 4, label: "Tên Thứ" },
     { value: 9, label: "Tên Thứ (ngắn: T2, T3...)" },
-    { value: 5, label: "Âm lịch Ngày/Tháng" },
+    { value: 5, label: "Ngày/Tháng âm lịch (chỉ số, không có chữ)" },
     { value: 6, label: "Năm" },
     { value: 7, label: "Ngày (số)" },
     { value: 8, label: "Tháng (số)" },
+    { value: 12, label: "Chữ tĩnh: \"Âm lịch\"" },
+    { value: 13, label: "Chữ tĩnh: \"Dương lịch\"" },
   ];
   const LAYOUT_BIND_NUMERIC_ONLY = [6, 7, 8, 10, 11];
   function isSevenSegmentFont(font){ return font===1 || font===3; }
@@ -1469,10 +1471,21 @@
   ];
   let layoutSelected = -1;
 
+  // ĐÃ SỬA: trước đây dùng mức phóng cố định theo bậc thang (IMG_W<=260
+  // thì luôn phóng 3 lần) - với màn 250px, phóng 3 lần ra 750px, RỘNG HƠN
+  // khung hiển thị thực tế trên trang (khung .wrap giới hạn max-width
+  // 760px, trừ đi các lớp đệm chỉ còn hơn 600px) -> sinh thanh cuộn ngang
+  // như trong ảnh chụp màn hình bạn gửi. Giờ đo TRỰC TIẾP chiều rộng thật
+  // đang có của khung chứa (#layoutStageWrap.clientWidth, đã tự trừ hết
+  // padding của mọi lớp cha) rồi tính mức phóng tối đa vừa khít, không
+  // bao giờ tràn ra ngoài -> không còn thanh cuộn dù màn hình nào.
   function layoutZoom(){
-    if(IMG_W<=130) return 4;
-    if(IMG_W<=260) return 3;
-    return 2;
+    const wrap = $("layoutStageWrap");
+    const availW = Math.max(100, wrap.clientWidth - 32); // trừ padding riêng của layoutStageWrap (16px x2)
+    let z = Math.floor(availW / IMG_W);
+    if(z < 1) z = 1;
+    if(z > 4) z = 4; // phóng quá 4 lần không cần thiết, đủ để kéo-thả chính xác bằng ngón tay/chuột
+    return z;
   }
 
   function layoutClamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
@@ -1490,10 +1503,16 @@
       case 3: return `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`;
       case 4: return wdayFull;
       case 9: return wdayShort;
-      case 5: return `${pad(now.getDate())}/${pad(now.getMonth()+1)} (âm)`;
+      // Bỏ chữ "(âm)" khỏi preview - thiết bị THẬT chỉ hiện đúng 2 số
+      // ngày/tháng âm lịch, không tự kèm chữ nào cả (đây chính là nguyên
+      // nhân bạn thấy web ghi "(âm)" nhưng lên máy thật không có). Muốn
+      // có chữ, giờ dùng thêm 1 phần tử "Chữ tĩnh: Âm lịch" đặt cạnh.
+      case 5: return `${pad(now.getDate())}/${pad(now.getMonth()+1)}`;
       case 6: return `${now.getFullYear()}`;
       case 7: return `${pad(now.getDate())}`;
       case 8: return `${pad(now.getMonth()+1)}`;
+      case 12: return "Âm lịch";
+      case 13: return "Dương lịch";
       default: return "";
     }
   }
@@ -1687,16 +1706,21 @@
         <label class="lf">Cỡ chữ ngày
           <select id="propFont">${layoutOptionsHtml(LAYOUT_FONTS.filter(o=>!isSevenSegmentFont(o.value)), el.font)}</select>
         </label>
-        <label class="lf">Rộng <input type="number" id="propW" min="40" max="255" value="${el.w}"></label>
+        <label class="lf">Rộng <input type="number" id="propW" min="${layoutMinCalendarWidth(el.font)}" max="255" value="${el.w}"></label>
         <label class="lf">Cao <input type="number" id="propH" min="24" max="255" value="${el.h}"></label>
         <label class="lf">Màu
           <select id="propColor">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select>
         </label>
-        <span style="font-size:10px; color:var(--ink-faint); max-width:150px;">Lịch thật tự tính đúng tháng/ngày hôm nay đang chạy trên thiết bị - không phải ảnh tĩnh.</span>
+        <span style="font-size:10px; color:var(--ink-faint); max-width:150px;">Lịch thật tự tính đúng tháng/ngày hôm nay đang chạy trên thiết bị - không phải ảnh tĩnh. Rộng tối thiểu ${layoutMinCalendarWidth(el.font)}px để số 2 chữ số không bị đè nhau.</span>
         <button class="btnDel small">Xoá phần tử</button>
       `;
-      $("propFont").addEventListener("change", (e) => { el.font = parseInt(e.target.value,10); renderLayoutStage(); });
-      $("propW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||40,40,255); renderLayoutStage(); });
+      $("propFont").addEventListener("change", (e) => {
+        el.font = parseInt(e.target.value,10);
+        const minW = layoutMinCalendarWidth(el.font);
+        if(el.w < minW){ el.w = minW; log(`Đổi cỡ chữ khiến lịch cần rộng hơn - đã tự nâng lên ${minW}px.`, "err"); }
+        renderLayoutProps(); renderLayoutStage();
+      });
+      $("propW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||layoutMinCalendarWidth(el.font),layoutMinCalendarWidth(el.font),255); renderLayoutStage(); });
       $("propH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||24,24,255); renderLayoutStage(); });
     }else if(el.type===5){
       panel.innerHTML = `
@@ -1749,6 +1773,21 @@
     renderLayoutStage();
   });
 
+  // Chiều rộng tối thiểu để lịch tháng không bị đè số (bài học từ ảnh
+  // chụp thực tế: gợi ý mặc định cũ 150px cho màn 250px, chia 7 cột chỉ
+  // được ~21px/cột - ĐỦ cho số 1 chữ số nhưng KHÔNG ĐỦ cho số 2 chữ số
+  // như "10","11","28" - các số đó bị dính liền nhau khi hiển thị thật,
+  // dù bản xem trước trên web (dùng CSS grid tự co giãn) vẫn trông bình
+  // thường vì trình duyệt không mô phỏng đúng việc đo chữ theo font thật
+  // như firmware). Tính theo ĐÚNG font 0 (font mặc định của lịch) của
+  // TỪNG thiết bị: 1 cột cần đủ chỗ cho 2 chữ số + chút đệm.
+  function layoutMinCalendarWidth(font){
+    if(font===undefined) font = 0;
+    const charW = currentDevice.layoutFontPx[font] * currentDevice.layoutCharWidthRatio[font];
+    const colW = Math.ceil(charW*2) + 4; // 2 chữ số + đệm
+    return colW*7;
+  }
+
   let layoutSizePromptType = 2;
 
   $("btnAddBox").addEventListener("click", () => {
@@ -1760,7 +1799,8 @@
   $("btnAddCalendar").addEventListener("click", () => {
     if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
     layoutSizePromptType = 4;
-    $("boxSizeW").value = Math.min(150, IMG_W-8);
+    const minW = layoutMinCalendarWidth();
+    $("boxSizeW").value = Math.min(Math.max(minW, 150), IMG_W-8);
     $("boxSizeH").value = Math.min(80, IMG_H-8);
     $("layoutBoxSizePrompt").style.display = "flex";
   });
@@ -1768,9 +1808,20 @@
     $("layoutBoxSizePrompt").style.display = "none";
   });
   $("btnBoxSizeOk").addEventListener("click", () => {
-    const w = layoutClamp(parseInt($("boxSizeW").value,10)||20, 4, 255);
+    let w = layoutClamp(parseInt($("boxSizeW").value,10)||20, 4, 255);
     const h = layoutClamp(parseInt($("boxSizeH").value,10)||20, 4, 255);
     const font = layoutSizePromptType===4 ? 0 : 0;
+    // Ép chiều rộng tối thiểu riêng cho lịch tháng - dù người dùng gõ tay
+    // số nhỏ hơn, vẫn tự nâng lên mức đủ để không đè số 2 chữ số khi
+    // hiển thị thật. Cảnh báo rõ trong nhật ký để người dùng biết vì sao
+    // số họ gõ bị thay đổi.
+    if(layoutSizePromptType===4){
+      const minW = layoutMinCalendarWidth();
+      if(w < minW){
+        log(`Chiều rộng lịch tháng đã tự nâng từ ${w}px lên ${minW}px - dưới mức này số ngày 2 chữ số (10,11,...) sẽ bị đè lên nhau khi hiển thị thật.`, "err");
+        w = minW;
+      }
+    }
     layoutElements.push({ type:layoutSizePromptType, x:4, y:4, font, color:0, bind:0, w, h });
     layoutSelected = layoutElements.length-1;
     $("layoutBoxSizePrompt").style.display = "none";
