@@ -647,8 +647,11 @@
       //   font 1 (YEARFONT): bh=22, bw=21 -> tỉ lệ rộng/cao = 0.95 (chỉ có số 0-9)
       //   font 2 (sfont26) : bh=19, bw=18 -> tỉ lệ rộng/cao = 0.95
       //   font 3 (CLKDIGIT): bh=62, bw=49 -> tỉ lệ rộng/cao = 0.79 (chỉ có số 0-9)
-      layoutFontPx: { 0:10, 1:22, 2:19, 3:62 },
-      layoutCharWidthRatio: { 0:1.00, 1:0.95, 2:0.95, 3:0.79 },
+      // (CLKDIGIT từng phải giảm tạm xuống 34px lúc mới port xong tính năng
+      // layout để đủ RAM build - người dùng sau đó bỏ bớt 1 giao diện lịch
+      // (clock_draw4) để lấy lại RAM, phục hồi CLKDIGIT về đúng 60px gốc.)
+      layoutFontPx: { 0:10, 1:22, 2:19, 3:50 },
+      layoutCharWidthRatio: { 0:1.00, 1:0.95, 2:0.95, 3:0.78 },
       // Đồng hồ kim (type=5) vẫn CHƯA port sang 4.2" (draw_analog_clock()
       // không có sẵn trong dự án này) - ẩn nút "+ Đồng hồ kim" khi chọn màn
       // này, giữ nguyên như trước.
