@@ -636,16 +636,22 @@
       // epd.c). PHẢI khớp đúng con số 128 này với firmware, không tự ý
       // đổi một bên.
       chunkSize: 128,
-      // Giao diện tuỳ chỉnh (layout): dự án 4.2" dùng BẢNG FONT KHÁC HẲN
-      // 2 bản 2.13" (sfont≈12px, CLKDIGIT≈90px, sfont16≈18px,
-      // YEARFONT≈36px) - firmware tự ánh xạ lại id 0-3 sang đúng font
-      // thật của nó (xem layout_font_map[] trong user_custs1_impl.c),
-      // web chỉ cần biết ĐÚNG KÍCH THƯỚC THẬT để vẽ khung xem trước cho
-      // khớp tỉ lệ.
-      layoutFontPx: { 0:12, 1:90, 2:18, 3:36 },
-      layoutCharWidthRatio: { 0:0.58, 1:0.7, 2:0.58, 3:0.65 },
-      // CHƯA hỗ trợ "đồng hồ kim" ở firmware 4.2" (thiếu sẵn hàm vẽ hình
-      // tròn/đường thẳng, để dành lượt sau) - ẩn nút đó khi chọn màn này.
+      // Giao diện tuỳ chỉnh (layout) - ĐÃ PORT xong sang firmware 4.2" (trước
+      // đó dự án này chưa có tính năng này, chỉ có tính năng ảnh). Bảng font
+      // của dự án này khác 2 bản 2.13" (có 2 slot NULL trong font_list[]),
+      // nên layout_font_map[] trong firmware ánh xạ 4 cỡ chữ web cho chọn
+      // sang đúng font thật đang có: 0->sfont, 1->YEARFONT, 2->sfont26,
+      // 3->CLKDIGIT. Số liệu dưới đây ĐO TRỰC TIẾP từ chính các file font đó
+      // (giống cách đã làm với 2 bản 2.13" trước đây - không ước lượng):
+      //   font 0 (sfont)   : bh=10, bw=10 -> tỉ lệ rộng/cao = 1.00
+      //   font 1 (YEARFONT): bh=22, bw=21 -> tỉ lệ rộng/cao = 0.95 (chỉ có số 0-9)
+      //   font 2 (sfont26) : bh=19, bw=18 -> tỉ lệ rộng/cao = 0.95
+      //   font 3 (CLKDIGIT): bh=62, bw=49 -> tỉ lệ rộng/cao = 0.79 (chỉ có số 0-9)
+      layoutFontPx: { 0:10, 1:22, 2:19, 3:62 },
+      layoutCharWidthRatio: { 0:1.00, 1:0.95, 2:0.95, 3:0.79 },
+      // Đồng hồ kim (type=5) vẫn CHƯA port sang 4.2" (draw_analog_clock()
+      // không có sẵn trong dự án này) - ẩn nút "+ Đồng hồ kim" khi chọn màn
+      // này, giữ nguyên như trước.
       layoutHasClock: false,
     },
     "213": {
