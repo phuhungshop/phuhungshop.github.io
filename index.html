@@ -554,8 +554,8 @@
 
     <div id="layoutBoxSizePrompt" class="layout-size-prompt" style="display:none;">
       <span style="font-size:11.5px; color:var(--ink-soft);">Kích thước khung (px thiết bị):</span>
-      <label class="lf">Rộng <input type="number" id="boxSizeW" min="4" max="255" value="60"></label>
-      <label class="lf">Cao <input type="number" id="boxSizeH" min="4" max="255" value="30"></label>
+      <label class="lf">Rộng <input type="number" id="boxSizeW" min="4" max="400" value="60"></label>
+      <label class="lf">Cao <input type="number" id="boxSizeH" min="4" max="300" value="30"></label>
       <button id="btnBoxSizeOk" class="small">Tạo & kéo vào khung</button>
       <button id="btnBoxSizeCancel" class="secondary small">Huỷ</button>
     </div>
@@ -628,34 +628,27 @@
       label: "4.2 inch",
       W: 400, H: 300,
       hasRed: true,
-      // Firmware bản 4.2" (dự án 1, src/user_custs1_impl.c) dùng
-      // IMGD_CHUNK_SIZE=128 (bản gốc, không đổi) - nguyên nhân "gửi ảnh
-      // lỗi lúc phần cứng mới bật nguồn lạnh" hoá ra KHÔNG phải do kích
-      // thước gói, mà do thiếu bước chờ chip xử lý xong reset trong
-      // epd_init_win() (đã sửa trực tiếp trong firmware - xem
-      // epd.c). PHẢI khớp đúng con số 128 này với firmware, không tự ý
-      // đổi một bên.
       chunkSize: 128,
-      // Giao diện tuỳ chỉnh (layout) - ĐÃ PORT xong sang firmware 4.2" (trước
-      // đó dự án này chưa có tính năng này, chỉ có tính năng ảnh). Bảng font
-      // của dự án này khác 2 bản 2.13" (có 2 slot NULL trong font_list[]),
-      // nên layout_font_map[] trong firmware ánh xạ 4 cỡ chữ web cho chọn
-      // sang đúng font thật đang có: 0->sfont, 1->YEARFONT, 2->sfont26,
-      // 3->CLKDIGIT. Số liệu dưới đây ĐO TRỰC TIẾP từ chính các file font đó
-      // (giống cách đã làm với 2 bản 2.13" trước đây - không ước lượng):
+      // Giao diện tuỳ chỉnh (layout) - ĐÃ PORT xong sang firmware 4.2".
       //   font 0 (sfont)   : bh=10, bw=10 -> tỉ lệ rộng/cao = 1.00
       //   font 1 (YEARFONT): bh=22, bw=21 -> tỉ lệ rộng/cao = 0.95 (chỉ có số 0-9)
       //   font 2 (sfont26) : bh=19, bw=18 -> tỉ lệ rộng/cao = 0.95
-      //   font 3 (CLKDIGIT): bh=62, bw=49 -> tỉ lệ rộng/cao = 0.79 (chỉ có số 0-9)
-      // (CLKDIGIT từng phải giảm tạm xuống 34px lúc mới port xong tính năng
-      // layout để đủ RAM build - người dùng sau đó bỏ bớt 1 giao diện lịch
-      // (clock_draw4) để lấy lại RAM, phục hồi CLKDIGIT về đúng 60px gốc.)
+      //   font 3 (CLKDIGIT): bh=50, bw=39 -> tỉ lệ rộng/cao = 0.78 (chỉ có số 0-9)
+      // (CLKDIGIT hiện đang ở mức 48px do giới hạn RAM - xem lịch sử chỉnh sửa)
       layoutFontPx: { 0:10, 1:22, 2:19, 3:50 },
       layoutCharWidthRatio: { 0:1.00, 1:0.95, 2:0.95, 3:0.78 },
-      // Đồng hồ kim (type=5) vẫn CHƯA port sang 4.2" (draw_analog_clock()
-      // không có sẵn trong dự án này) - ẩn nút "+ Đồng hồ kim" khi chọn màn
-      // này, giữ nguyên như trước.
       layoutHasClock: false,
+      // ĐÃ SỬA: định dạng phần tử layout của màn này đổi sang 12 byte/phần tử
+      // (x,y,w,h mỗi cái 2 byte thay vì 1) để toạ độ vượt qua được giới hạn cũ
+      // 255px - panel 400x300 cần Y tới 299, X tới 399, không đủ chỗ trong 1
+      // byte. Đổi lại giảm số phần tử tối đa 16->10 để tổng RAM layout_data[]
+      // không tăng (10*12=120 byte, còn ít hơn 16*8=128 byte trước đây). 2 màn
+      // 2.13" vẫn dùng định dạng cũ 8 byte/phần tử (212x104 và 250x122 đều
+      // nằm gọn trong 255px, không cần đổi).
+      layoutWideCoords: true,
+      layoutElemSize: 12,
+      layoutMaxElements: 10,
+      layoutChunkSize: 12,
     },
     "213": {
       label: "2.13 inch (212×104)",
@@ -673,6 +666,10 @@
       layoutFontPx: { 0:12, 1:50, 2:18, 3:66 },
       layoutCharWidthRatio: { 0:0.58, 1:0.77, 2:0.58, 3:0.77 },
       layoutHasClock: true,
+      layoutWideCoords: false,
+      layoutElemSize: 8,
+      layoutMaxElements: 16,
+      layoutChunkSize: 17,
     },
     "250": {
       label: "2.13 inch (250×122)",
@@ -704,6 +701,10 @@
       layoutFontPx: { 0:10, 1:50, 2:12, 3:66 },
       layoutCharWidthRatio: { 0:1.00, 1:0.82, 2:0.92, 3:0.82 },
       layoutHasClock: true,
+      layoutWideCoords: false,
+      layoutElemSize: 8,
+      layoutMaxElements: 16,
+      layoutChunkSize: 17,
     },
   };
   let currentDevice = DEVICES["42"];
@@ -1441,9 +1442,10 @@
   // =================================================================
   // GIAO DIỆN TUỲ CHỈNH THEO LAYOUT (đang test) - kéo thả trực quan
   // =================================================================
-  const LAYOUT_MAX_ELEMENTS = 16;
-  const LAYOUT_ELEM_SIZE = 8;
-  const LAYOUT_CHUNK_SIZE = 17;
+  // currentDevice.layoutMaxElements/currentDevice.layoutElemSize/currentDevice.layoutChunkSize giờ lấy theo
+  // currentDevice.layoutMaxElements/layoutElemSize/layoutChunkSize (xem
+  // DEVICES ở trên) - màn 4.2" dùng định dạng 12 byte/phần tử (toạ độ
+  // rộng hơn), 2 màn 2.13" vẫn dùng định dạng cũ 8 byte/phần tử.
 
   const LAYOUT_FONTS = [
     { value: 0, label: "Nhỏ" },
@@ -1609,7 +1611,7 @@
       stage.appendChild(div);
     });
 
-    $("layoutCountLabel").textContent = `${layoutElements.length}/${LAYOUT_MAX_ELEMENTS} phần tử`;
+    $("layoutCountLabel").textContent = `${layoutElements.length}/${currentDevice.layoutMaxElements} phần tử`;
     updateLayoutSendBtn();
     renderLayoutProps();
   }
@@ -1715,8 +1717,8 @@
         <label class="lf">Cỡ chữ ngày
           <select id="propFont">${layoutOptionsHtml(LAYOUT_FONTS.filter(o=>!isSevenSegmentFont(o.value)), el.font)}</select>
         </label>
-        <label class="lf">Rộng <input type="number" id="propW" min="${layoutMinCalendarWidth(el.font)}" max="255" value="${el.w}"></label>
-        <label class="lf">Cao <input type="number" id="propH" min="24" max="255" value="${el.h}"></label>
+        <label class="lf">Rộng <input type="number" id="propW" min="${layoutMinCalendarWidth(el.font)}" max="${IMG_W}" value="${el.w}"></label>
+        <label class="lf">Cao <input type="number" id="propH" min="24" max="${IMG_H}" value="${el.h}"></label>
         <label class="lf">Màu
           <select id="propColor">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select>
         </label>
@@ -1729,8 +1731,8 @@
         if(el.w < minW){ el.w = minW; log(`Đổi cỡ chữ khiến lịch cần rộng hơn - đã tự nâng lên ${minW}px.`, "err"); }
         renderLayoutProps(); renderLayoutStage();
       });
-      $("propW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||layoutMinCalendarWidth(el.font),layoutMinCalendarWidth(el.font),255); renderLayoutStage(); });
-      $("propH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||24,24,255); renderLayoutStage(); });
+      $("propW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||layoutMinCalendarWidth(el.font),layoutMinCalendarWidth(el.font),IMG_W); renderLayoutStage(); });
+      $("propH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||24,24,IMG_H); renderLayoutStage(); });
     }else if(el.type===5){
       panel.innerHTML = `
         <label class="lf">Bán kính <input type="number" id="propRadius" min="10" max="50" value="${el.w}"></label>
@@ -1750,16 +1752,16 @@
             <option value="3"${el.type===3?" selected":""}>Khung viền</option>
           </select>
         </label>
-        <label class="lf">Rộng <input type="number" id="propW" min="4" max="255" value="${el.w}"></label>
-        <label class="lf">Cao <input type="number" id="propH" min="4" max="255" value="${el.h}"></label>
+        <label class="lf">Rộng <input type="number" id="propW" min="4" max="${IMG_W}" value="${el.w}"></label>
+        <label class="lf">Cao <input type="number" id="propH" min="4" max="${IMG_H}" value="${el.h}"></label>
         <label class="lf">Màu
           <select id="propColor">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select>
         </label>
         <button class="btnDel small">Xoá phần tử</button>
       `;
       $("propType").addEventListener("change", (e) => { el.type = parseInt(e.target.value,10); renderLayoutStage(); });
-      $("propW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||1,1,255); renderLayoutStage(); });
-      $("propH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||1,1,255); renderLayoutStage(); });
+      $("propW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||1,1,IMG_W); renderLayoutStage(); });
+      $("propH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||1,1,IMG_H); renderLayoutStage(); });
     }
     if($("propColor")){
       $("propColor").addEventListener("change", (e) => { el.color = parseInt(e.target.value,10); renderLayoutStage(); });
@@ -1776,7 +1778,7 @@
   });
 
   $("btnAddText").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
+    if(layoutElements.length >= currentDevice.layoutMaxElements){ log(`Đã đạt tối đa ${currentDevice.layoutMaxElements} phần tử.`, "err"); return; }
     layoutElements.push({ type:1, x:4, y:4, font:2, color:0, bind:0, w:0, h:0 });
     layoutSelected = layoutElements.length-1;
     renderLayoutStage();
@@ -1791,7 +1793,7 @@
   // như firmware). Tính theo ĐÚNG font 0 (font mặc định của lịch) của
   // TỪNG thiết bị: 1 cột cần đủ chỗ cho 2 chữ số + chút đệm.
   function layoutMinCalendarWidth(font){
-    if(font===undefined) font = 0;
+    if(font===undefined) font = 2; // khớp font mặc định mới của lịch tháng (xem btnAddCalendar)
     const charW = currentDevice.layoutFontPx[font] * currentDevice.layoutCharWidthRatio[font];
     const colW = Math.ceil(charW*2) + 4; // 2 chữ số + đệm
     return colW*7;
@@ -1800,15 +1802,17 @@
   let layoutSizePromptType = 2;
 
   $("btnAddBox").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
+    if(layoutElements.length >= currentDevice.layoutMaxElements){ log(`Đã đạt tối đa ${currentDevice.layoutMaxElements} phần tử.`, "err"); return; }
     layoutSizePromptType = 2;
+    $("boxSizeW").max = IMG_W; $("boxSizeH").max = IMG_H;
     $("boxSizeW").value = 60; $("boxSizeH").value = 30;
     $("layoutBoxSizePrompt").style.display = "flex";
   });
   $("btnAddCalendar").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
+    if(layoutElements.length >= currentDevice.layoutMaxElements){ log(`Đã đạt tối đa ${currentDevice.layoutMaxElements} phần tử.`, "err"); return; }
     layoutSizePromptType = 4;
     const minW = layoutMinCalendarWidth();
+    $("boxSizeW").max = IMG_W; $("boxSizeH").max = IMG_H;
     $("boxSizeW").value = Math.min(Math.max(minW, 150), IMG_W-8);
     $("boxSizeH").value = Math.min(80, IMG_H-8);
     $("layoutBoxSizePrompt").style.display = "flex";
@@ -1817,9 +1821,12 @@
     $("layoutBoxSizePrompt").style.display = "none";
   });
   $("btnBoxSizeOk").addEventListener("click", () => {
-    let w = layoutClamp(parseInt($("boxSizeW").value,10)||20, 4, 255);
-    const h = layoutClamp(parseInt($("boxSizeH").value,10)||20, 4, 255);
-    const font = layoutSizePromptType===4 ? 0 : 0;
+    let w = layoutClamp(parseInt($("boxSizeW").value,10)||20, 4, IMG_W);
+    const h = layoutClamp(parseInt($("boxSizeH").value,10)||20, 4, IMG_H);
+    // Lịch tháng mặc định dùng font "Lớn" (2) thay vì "Nhỏ" (0) - số ngày quá
+    // nhỏ khó đọc trên màn thật (phản hồi thực tế từ người dùng), font lớn
+    // hơn vẫn vừa đủ trong 1 ô lịch trên panel 400x300 rộng rãi.
+    const font = layoutSizePromptType===4 ? 2 : 0;
     // Ép chiều rộng tối thiểu riêng cho lịch tháng - dù người dùng gõ tay
     // số nhỏ hơn, vẫn tự nâng lên mức đủ để không đè số 2 chữ số khi
     // hiển thị thật. Cảnh báo rõ trong nhật ký để người dùng biết vì sao
@@ -1838,7 +1845,7 @@
   });
 
   $("btnAddClock").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
+    if(layoutElements.length >= currentDevice.layoutMaxElements){ log(`Đã đạt tối đa ${currentDevice.layoutMaxElements} phần tử.`, "err"); return; }
     $("layoutClockSizePrompt").style.display = "flex";
   });
   $("btnClockSizeCancel").addEventListener("click", () => {
@@ -1853,14 +1860,14 @@
   });
 
   $("btnAddHBar").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
+    if(layoutElements.length >= currentDevice.layoutMaxElements){ log(`Đã đạt tối đa ${currentDevice.layoutMaxElements} phần tử.`, "err"); return; }
     const w = Math.min(100, Math.max(4, IMG_W-8));
     layoutElements.push({ type:2, x:4, y:4, font:0, color:0, bind:0, w, h:3 });
     layoutSelected = layoutElements.length-1;
     renderLayoutStage();
   });
   $("btnAddVBar").addEventListener("click", () => {
-    if(layoutElements.length >= LAYOUT_MAX_ELEMENTS){ log(`Đã đạt tối đa ${LAYOUT_MAX_ELEMENTS} phần tử.`, "err"); return; }
+    if(layoutElements.length >= currentDevice.layoutMaxElements){ log(`Đã đạt tối đa ${currentDevice.layoutMaxElements} phần tử.`, "err"); return; }
     const h = Math.min(60, Math.max(4, IMG_H-8));
     layoutElements.push({ type:2, x:4, y:4, font:0, color:0, bind:0, w:3, h });
     layoutSelected = layoutElements.length-1;
@@ -1872,17 +1879,31 @@
   }
 
   function packLayoutElements(){
-    const buf = new Uint8Array(layoutElements.length*LAYOUT_ELEM_SIZE);
+    const buf = new Uint8Array(layoutElements.length*currentDevice.layoutElemSize);
     layoutElements.forEach((el, idx) => {
-      const o = idx*LAYOUT_ELEM_SIZE;
-      buf[o+0] = el.type & 0xff;
-      buf[o+1] = el.x & 0xff;
-      buf[o+2] = el.y & 0xff;
-      buf[o+3] = el.font & 0xff;
-      buf[o+4] = el.color & 0xff;
-      buf[o+5] = el.bind & 0xff;
-      buf[o+6] = el.w & 0xff;
-      buf[o+7] = el.h & 0xff;
+      const o = idx*currentDevice.layoutElemSize;
+      if(currentDevice.layoutWideCoords){
+        // Định dạng 12 byte (màn 4.2"): x/y/w/h mỗi cái 2 byte (little-endian) -
+        // khớp đúng layout_data[] bên firmware (đọc e[1]|e[2]<<8 v.v.)
+        buf[o+0]  = el.type & 0xff;
+        buf[o+1]  = el.x & 0xff;       buf[o+2]  = (el.x>>8) & 0xff;
+        buf[o+3]  = el.y & 0xff;       buf[o+4]  = (el.y>>8) & 0xff;
+        buf[o+5]  = el.font & 0xff;
+        buf[o+6]  = el.color & 0xff;
+        buf[o+7]  = el.bind & 0xff;
+        buf[o+8]  = el.w & 0xff;       buf[o+9]  = (el.w>>8) & 0xff;
+        buf[o+10] = el.h & 0xff;       buf[o+11] = (el.h>>8) & 0xff;
+      }else{
+        // Định dạng cũ 8 byte (2 màn 2.13"): x/y/w/h mỗi cái 1 byte.
+        buf[o+0] = el.type & 0xff;
+        buf[o+1] = el.x & 0xff;
+        buf[o+2] = el.y & 0xff;
+        buf[o+3] = el.font & 0xff;
+        buf[o+4] = el.color & 0xff;
+        buf[o+5] = el.bind & 0xff;
+        buf[o+6] = el.w & 0xff;
+        buf[o+7] = el.h & 0xff;
+      }
     });
     return buf;
   }
@@ -1902,10 +1923,10 @@
       await writeWithRetry(new Uint8Array([0x98, count]), 3);
       log(`Đã gửi lệnh bắt đầu (0x98) - ${count} phần tử...`);
 
-      const totalChunks = Math.ceil(packed.length/LAYOUT_CHUNK_SIZE);
+      const totalChunks = Math.ceil(packed.length/currentDevice.layoutChunkSize);
       for(let i=0; i<totalChunks; i++){
-        const off = i*LAYOUT_CHUNK_SIZE;
-        const end = Math.min(off+LAYOUT_CHUNK_SIZE, packed.length);
+        const off = i*currentDevice.layoutChunkSize;
+        const end = Math.min(off+currentDevice.layoutChunkSize, packed.length);
         const chunkData = packed.slice(off, end);
         const buf = new Uint8Array(3+chunkData.length);
         buf[0] = 0x99;
@@ -1965,19 +1986,19 @@
         const elements = Array.isArray(data) ? data : data.elements;
         if(!Array.isArray(elements)) throw new Error("File không đúng định dạng (thiếu danh sách phần tử).");
 
-        const cleaned = elements.slice(0, LAYOUT_MAX_ELEMENTS).map((el) => ({
+        const cleaned = elements.slice(0, currentDevice.layoutMaxElements).map((el) => ({
           type:  layoutClamp(parseInt(el.type,10)  || 0, 0, 5),
-          x:     layoutClamp(parseInt(el.x,10)     || 0, 0, 255),
-          y:     layoutClamp(parseInt(el.y,10)     || 0, 0, 255),
+          x:     layoutClamp(parseInt(el.x,10)     || 0, 0, IMG_W-1),
+          y:     layoutClamp(parseInt(el.y,10)     || 0, 0, IMG_H-1),
           font:  layoutClamp(parseInt(el.font,10)  || 0, 0, 3),
           color: layoutClamp(parseInt(el.color,10) || 0, 0, 2),
           bind:  parseInt(el.bind,10) || 0,
-          w:     layoutClamp(parseInt(el.w,10)     || 0, 0, 255),
-          h:     layoutClamp(parseInt(el.h,10)     || 0, 0, 255),
+          w:     layoutClamp(parseInt(el.w,10)     || 0, 0, IMG_W),
+          h:     layoutClamp(parseInt(el.h,10)     || 0, 0, IMG_H),
         }));
 
-        if(elements.length > LAYOUT_MAX_ELEMENTS){
-          log(`File có ${elements.length} phần tử, chỉ tải ${LAYOUT_MAX_ELEMENTS} phần tử đầu (giới hạn thiết bị).`, "err");
+        if(elements.length > currentDevice.layoutMaxElements){
+          log(`File có ${elements.length} phần tử, chỉ tải ${currentDevice.layoutMaxElements} phần tử đầu (giới hạn thiết bị).`, "err");
         }
 
         layoutElements = cleaned;
