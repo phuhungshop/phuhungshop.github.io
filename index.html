@@ -638,6 +638,14 @@
       layoutFontPx: { 0:10, 1:22, 2:19, 3:32 },
       layoutCharWidthRatio: { 0:1.00, 1:0.95, 2:0.95, 3:0.77 },
       layoutHasClock: false,
+      // ĐÃ SỬA: lưới ngày trong "Lịch tháng thật" giờ LUÔN dùng sfont16 (11x12px)
+      // ở firmware, không đổi theo "font" người dùng chọn nữa - khớp CHÍNH XÁC
+      // draw_calendar_panel() gốc (giao diện 2/3, dùng chung font này). Trước đó
+      // dùng font người chọn (mặc định "Lớn"=sfont26, to hơn hẳn) khiến bề rộng
+      // tối thiểu tính ra lớn hơn nhiều mức cần thiết, không giảm được xuống mức
+      // tương đương giao diện 2/3 (chỉ 224px) như người dùng muốn.
+      calendarGridFontPx: 12,
+      calendarGridCharRatio: 11/12,
       // ĐÃ SỬA: định dạng phần tử layout của màn này đổi sang 12 byte/phần tử
       // (x,y,w,h mỗi cái 2 byte thay vì 1) để toạ độ vượt qua được giới hạn cũ
       // 255px - panel 400x300 cần Y tới 299, X tới 399, không đủ chỗ trong 1
@@ -1713,10 +1721,13 @@
       $("propFont").addEventListener("change", (e) => { el.font = parseInt(e.target.value,10); renderLayoutProps(); renderLayoutStage(); });
       $("propBind").addEventListener("change", (e) => { el.bind = parseInt(e.target.value,10); renderLayoutStage(); });
     }else if(el.type===4){
+      const fontRowHtml = currentDevice.calendarGridFontPx
+        ? `<span style="font-size:10px; color:var(--ink-faint); max-width:130px;">Cỡ chữ lưới ngày cố định (giống giao diện 2/3 có sẵn), không chỉnh được ở màn này.</span>`
+        : `<label class="lf">Cỡ chữ ngày
+             <select id="propFont">${layoutOptionsHtml(LAYOUT_FONTS.filter(o=>!isSevenSegmentFont(o.value)), el.font)}</select>
+           </label>`;
       panel.innerHTML = `
-        <label class="lf">Cỡ chữ ngày
-          <select id="propFont">${layoutOptionsHtml(LAYOUT_FONTS.filter(o=>!isSevenSegmentFont(o.value)), el.font)}</select>
-        </label>
+        ${fontRowHtml}
         <label class="lf">Rộng <input type="number" id="propW" min="${layoutMinCalendarWidth(el.font)}" max="${IMG_W}" value="${el.w}"></label>
         <label class="lf">Cao <input type="number" id="propH" min="24" max="${IMG_H}" value="${el.h}"></label>
         <label class="lf">Màu
@@ -1725,18 +1736,19 @@
         <span style="font-size:10px; color:var(--ink-faint); max-width:150px;">Lịch thật tự tính đúng tháng/ngày hôm nay đang chạy trên thiết bị - không phải ảnh tĩnh. Rộng tối thiểu ${layoutMinCalendarWidth(el.font)}px để số 2 chữ số không bị đè nhau.</span>
         <button class="btnDel small">Xoá phần tử</button>
       `;
-      $("propFont").addEventListener("change", (e) => {
-        el.font = parseInt(e.target.value,10);
-        const minW = layoutMinCalendarWidth(el.font);
-        if(el.w < minW){ el.w = minW; log(`Đổi cỡ chữ khiến lịch cần rộng hơn - đã tự nâng lên ${minW}px.`, "err"); }
-        renderLayoutProps(); renderLayoutStage();
-      });
+      if($("propFont")){
+        $("propFont").addEventListener("change", (e) => {
+          el.font = parseInt(e.target.value,10);
+          const minW = layoutMinCalendarWidth(el.font);
+          if(el.w < minW){ el.w = minW; log(`Đổi cỡ chữ khiến lịch cần rộng hơn - đã tự nâng lên ${minW}px.`, "err"); }
+          renderLayoutProps(); renderLayoutStage();
+        });
+      }
       $("propW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||layoutMinCalendarWidth(el.font),layoutMinCalendarWidth(el.font),IMG_W); renderLayoutStage(); });
       $("propH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||24,24,IMG_H); renderLayoutStage(); });
     }else if(el.type===5){
       panel.innerHTML = `
-        <label class="lf">Bán kính <input type="number" id="propRadius" min="10" max="50" value="${el.w}"></label>
-        <span style="font-size:10px; color:var(--ink-faint); max-width:150px;">Kim đồng hồ luôn màu đen (firmware chưa hỗ trợ đổi màu cho mục này).</span>
+        <label class="lf">Bán kính <input type="number" id="propRadius" min="10" max="50" value="${el.w}"></label>        <span style="font-size:10px; color:var(--ink-faint); max-width:150px;">Kim đồng hồ luôn màu đen (firmware chưa hỗ trợ đổi màu cho mục này).</span>
         <button class="btnDel small">Xoá phần tử</button>
       `;
       $("propRadius").addEventListener("input", (e) => {
@@ -1793,8 +1805,15 @@
   // như firmware). Tính theo ĐÚNG font 0 (font mặc định của lịch) của
   // TỪNG thiết bị: 1 cột cần đủ chỗ cho 2 chữ số + chút đệm.
   function layoutMinCalendarWidth(font){
-    if(font===undefined) font = 2; // khớp font mặc định mới của lịch tháng (xem btnAddCalendar)
-    const charW = currentDevice.layoutFontPx[font] * currentDevice.layoutCharWidthRatio[font];
+    let charW, colH;
+    if(currentDevice.calendarGridFontPx){
+      // Màn có lưới ngày dùng font CỐ ĐỊNH (hiện là 4.2") - không phụ thuộc "font"
+      // người dùng chọn cho phần tử lịch nữa, tính theo đúng font cố định đó.
+      charW = currentDevice.calendarGridFontPx * currentDevice.calendarGridCharRatio;
+    }else{
+      if(font===undefined) font = 2;
+      charW = currentDevice.layoutFontPx[font] * currentDevice.layoutCharWidthRatio[font];
+    }
     const colW = Math.ceil(charW*2) + 4; // 2 chữ số + đệm
     return colW*7;
   }
