@@ -655,7 +655,7 @@
       // nằm gọn trong 255px, không cần đổi).
       layoutWideCoords: true,
       layoutElemSize: 12,
-      layoutMaxElements: 10,
+      layoutMaxElements: 16,
       layoutChunkSize: 12,
     },
     "213": {
@@ -1778,6 +1778,52 @@
     if($("propColor")){
       $("propColor").addEventListener("change", (e) => { el.color = parseInt(e.target.value,10); renderLayoutStage(); });
     }
+
+    // Điều khiển thứ tự chồng lớp - áp dụng cho MỌI loại phần tử. Thứ tự trong danh sách
+    // layoutElements quyết định thứ tự vẽ (phần tử đứng SAU trong mảng vẽ ĐÈ LÊN phần tử
+    // đứng trước) - cả bên xem trước web lẫn firmware đều vẽ tuần tự theo đúng thứ tự này.
+    // Thêm nút này để giải quyết đúng nhu cầu "chèn chữ/đồng hồ lên trên 1 ô màu đặc" -
+    // vẽ ô màu trước, rồi bấm phần tử muốn đè lên -> "Đưa lên trên cùng".
+    panel.insertAdjacentHTML("beforeend", `
+      <div style="display:flex; gap:6px; width:100%; margin-top:4px; padding-top:8px; border-top:1px solid var(--rule);">
+        <span style="font-size:10px; color:var(--ink-faint); align-self:center;">Lớp:</span>
+        <button class="secondary small" id="btnLayerBack">Xuống dưới cùng</button>
+        <button class="secondary small" id="btnLayerDown">Xuống 1 lớp</button>
+        <button class="secondary small" id="btnLayerUp">Lên 1 lớp</button>
+        <button class="secondary small" id="btnLayerFront">Lên trên cùng</button>
+      </div>
+    `);
+    $("btnLayerFront").addEventListener("click", () => {
+      const [moved] = layoutElements.splice(layoutSelected, 1);
+      layoutElements.push(moved);
+      layoutSelected = layoutElements.length-1;
+      renderLayoutStage();
+    });
+    $("btnLayerBack").addEventListener("click", () => {
+      const [moved] = layoutElements.splice(layoutSelected, 1);
+      layoutElements.unshift(moved);
+      layoutSelected = 0;
+      renderLayoutStage();
+    });
+    $("btnLayerUp").addEventListener("click", () => {
+      if(layoutSelected < layoutElements.length-1){
+        const tmp = layoutElements[layoutSelected];
+        layoutElements[layoutSelected] = layoutElements[layoutSelected+1];
+        layoutElements[layoutSelected+1] = tmp;
+        layoutSelected += 1;
+        renderLayoutStage();
+      }
+    });
+    $("btnLayerDown").addEventListener("click", () => {
+      if(layoutSelected > 0){
+        const tmp = layoutElements[layoutSelected];
+        layoutElements[layoutSelected] = layoutElements[layoutSelected-1];
+        layoutElements[layoutSelected-1] = tmp;
+        layoutSelected -= 1;
+        renderLayoutStage();
+      }
+    });
+
     panel.querySelector(".btnDel").addEventListener("click", () => {
       layoutElements.splice(layoutSelected, 1);
       layoutSelected = -1;
