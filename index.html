@@ -473,6 +473,11 @@
         <span class="name">Màn 2.13" (250×122)</span>
         <span class="spec">250×122 · đen-trắng</span>
       </label>
+      <label id="devLabel290">
+        <input type="radio" name="deviceType" value="290">
+        <span class="name">Màn 2.9 inch</span>
+        <span class="spec">296×128 · 3 màu (đen-trắng-đỏ)</span>
+      </label>
     </div>
 
     <div class="drop-zone" id="dropZone">
@@ -533,7 +538,7 @@
   <!-- Custom layout designer (TEST) -->
   <section class="card">
     <h2><span class="idx">06</span> Giao diện tuỳ chỉnh (đang test)</h2>
-    <p class="desc">Bấm "+Thêm" để tạo phần tử, kéo-thả trực tiếp trên khung màn hình bên dưới để đặt vị trí. Bấm vào 1 phần tử để chỉnh nội dung/cỡ chữ/màu hoặc xoá. Đồng hồ tự vẽ lại mỗi phút bằng giờ THẬT, không phải ảnh tĩnh. Dùng chung bộ chọn màn hình ở mục 04 phía trên - cả 3 màn (4.2", 212×104, 250×122) đều đã hỗ trợ. Riêng "Đồng hồ kim" hiện chỉ có ở 2 màn 2.13".</p>
+    <p class="desc">Bấm "+Thêm" để tạo phần tử, kéo-thả trực tiếp trên khung màn hình bên dưới để đặt vị trí. Bấm vào 1 phần tử để chỉnh nội dung/cỡ chữ/màu hoặc xoá. Đồng hồ tự vẽ lại mỗi phút bằng giờ THẬT, không phải ảnh tĩnh. Dùng chung bộ chọn màn hình ở mục 04 phía trên - cả 4 màn (4.2", 2.9", 212×104, 250×122) đều đã hỗ trợ. Riêng "Đồng hồ kim" hiện chỉ có ở 2 màn 2.13".</p>
 
     <div class="layout-toolbar">
       <button id="btnAddText" class="secondary">+ Thêm chữ</button>
@@ -653,6 +658,34 @@
       // không tăng (10*12=120 byte, còn ít hơn 16*8=128 byte trước đây). 2 màn
       // 2.13" vẫn dùng định dạng cũ 8 byte/phần tử (212x104 và 250x122 đều
       // nằm gọn trong 255px, không cần đổi).
+      layoutWideCoords: true,
+      layoutElemSize: 12,
+      layoutMaxElements: 16,
+      layoutChunkSize: 12,
+    },
+    "290": {
+      label: "2.9 inch",
+      W: 296, H: 128,
+      hasRed: true,
+      chunkSize: 128,
+      // Dự án 2.9" (HINK-E029A10) port từ nền 4.2" - dùng CHUNG file font gốc
+      // (sfont/YEARFONT/sfont26/CLKDIGIT) nên số liệu đo y hệt bản 4.2":
+      //   font 0 (sfont)   : bh=10, bw=10 -> tỉ lệ rộng/cao = 1.00
+      //   font 1 (YEARFONT): bh=22, bw=21 -> tỉ lệ rộng/cao = 0.95 (chỉ có số 0-9)
+      //   font 2 (sfont26) : bh=19, bw=18 -> tỉ lệ rộng/cao = 0.95
+      //   font 3 (CLKDIGIT): bh=32, bw=25 -> tỉ lệ rộng/cao = 0.78 (chỉ có số 0-9)
+      layoutFontPx: { 0:10, 1:22, 2:19, 3:32 },
+      layoutCharWidthRatio: { 0:1.00, 1:0.95, 2:0.95, 3:0.77 },
+      // Đồng hồ kim (type=5) CHƯA có ở dự án này (draw_analog_clock() không
+      // tồn tại, giống 4.2") - ẩn nút tương ứng khi chọn màn này.
+      layoutHasClock: false,
+      // Lưới ngày trong "Lịch tháng thật" LUÔN dùng sfont16 (11x12px), không
+      // đổi theo "font" người dùng chọn - giống hệt quy ước bên 4.2".
+      calendarGridFontPx: 12,
+      calendarGridCharRatio: 11/12,
+      // Panel rộng 296px (vượt quá 255) nên BẮT BUỘC dùng định dạng 12
+      // byte/phần tử (x,y,w,h mỗi cái 2 byte) - giống hệt bản 4.2", khác 2
+      // màn 2.13" (nằm gọn trong 255px, dùng định dạng cũ 8 byte).
       layoutWideCoords: true,
       layoutElemSize: 12,
       layoutMaxElements: 16,
@@ -782,6 +815,7 @@
     $("devLabel42").classList.toggle("active", key==="42");
     $("devLabel213").classList.toggle("active", key==="213");
     $("devLabel250").classList.toggle("active", key==="250");
+    $("devLabel290").classList.toggle("active", key==="290");
 
     const redRow = $("redReduceRow");
     redRow.classList.toggle("disabled", !currentDevice.hasRed);
