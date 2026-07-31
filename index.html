@@ -679,10 +679,13 @@
       // Đồng hồ kim (type=5) CHƯA có ở dự án này (draw_analog_clock() không
       // tồn tại, giống 4.2") - ẩn nút tương ứng khi chọn màn này.
       layoutHasClock: false,
-      // Lưới ngày trong "Lịch tháng thật" LUÔN dùng sfont16 (11x12px), không
-      // đổi theo "font" người dùng chọn - giống hệt quy ước bên 4.2".
-      calendarGridFontPx: 12,
-      calendarGridCharRatio: 11/12,
+      // Lưới ngày trong "Lịch tháng thật" LUÔN dùng sfont (10x10px, font nhỏ nhất) -
+      // không đổi theo "font" người dùng chọn. ĐÃ SỬA: trước đây giả định sfont16
+      // (11x12), nhưng sau khi port lại layout_draw_calendar() theo đúng bản 250x122
+      // đã chạy ổn định, firmware đổi sang dùng font 0 (sfont) cố định - cần font NHỎ
+      // NHẤT vì cột lịch có thể khá hẹp (panel 296px chia 7 cột).
+      calendarGridFontPx: 10,
+      calendarGridCharRatio: 1.00,
       // Panel rộng 296px (vượt quá 255) nên BẮT BUỘC dùng định dạng 12
       // byte/phần tử (x,y,w,h mỗi cái 2 byte) - giống hệt bản 4.2", khác 2
       // màn 2.13" (nằm gọn trong 255px, dùng định dạng cũ 8 byte).
@@ -1560,7 +1563,15 @@
       // ngày/tháng âm lịch, không tự kèm chữ nào cả (đây chính là nguyên
       // nhân bạn thấy web ghi "(âm)" nhưng lên máy thật không có). Muốn
       // có chữ, giờ dùng thêm 1 phần tử "Chữ tĩnh: Âm lịch" đặt cạnh.
-      case 5: return `${pad(now.getDate())}/${pad(now.getMonth()+1)}`;
+      // Tính ĐÚNG ngày âm lịch thật (dùng lại solarToLunar() đã có sẵn cho mục
+      // "Đồng bộ thời gian") thay vì hiện nhầm ngày DƯƠNG như trước đây - lý do
+      // gây ra hiện tượng bạn thấy web ghi "30/07" nhưng thiết bị hiện đúng
+      // "17/06" (âm lịch thật của ngày đó) - thiết bị làm đúng, chỉ web xem
+      // trước sai.
+      case 5: {
+        const lunar = solarToLunar(now.getDate(), now.getMonth()+1, now.getFullYear(), TIMEZONE);
+        return `${pad(lunar.day)}/${pad(lunar.month)}`;
+      }
       case 6: return `${now.getFullYear()}`;
       case 7: return `${pad(now.getDate())}`;
       case 8: return `${pad(now.getMonth()+1)}`;
