@@ -676,9 +676,9 @@
       //   font 3 (CLKDIGIT): bh=32, bw=25 -> tỉ lệ rộng/cao = 0.78 (chỉ có số 0-9)
       layoutFontPx: { 0:10, 1:22, 2:19, 3:32 },
       layoutCharWidthRatio: { 0:1.00, 1:0.95, 2:0.95, 3:0.77 },
-      // Đồng hồ kim (type=5) CHƯA có ở dự án này (draw_analog_clock() không
-      // tồn tại, giống 4.2") - ẩn nút tương ứng khi chọn màn này.
-      layoutHasClock: false,
+      // Đồng hồ kim (type=5) ĐÃ PORT từ dự án 250x122 (draw_analog_clock() +
+      // draw_ellipse_filled/draw_line/bảng sin60-cos60) - bật nút tương ứng.
+      layoutHasClock: true,
       // Lưới ngày trong "Lịch tháng thật" LUÔN dùng sfont (10x10px, font nhỏ nhất) -
       // không đổi theo "font" người dùng chọn. ĐÃ SỬA: trước đây giả định sfont16
       // (11x12), nhưng sau khi port lại layout_draw_calendar() theo đúng bản 250x122
