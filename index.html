@@ -668,14 +668,15 @@
       W: 296, H: 128,
       hasRed: true,
       chunkSize: 128,
-      // Dự án 2.9" (HINK-E029A10) port từ nền 4.2" - dùng CHUNG file font gốc
-      // (sfont/YEARFONT/sfont26/CLKDIGIT) nên số liệu đo y hệt bản 4.2":
+      // ĐÃ SỬA: firmware bỏ hẳn sfont26 (tiết kiệm RAM), "Cỡ chữ: Lớn" (index 2) giờ
+      // trỏ sang DÙNG CHUNG sfont16 (giống hệt YEARFONT ở index 1 vẫn giữ riêng) - số
+      // liệu đo lại theo đúng font THẬT đang dùng ở firmware bây giờ:
       //   font 0 (sfont)   : bh=10, bw=10 -> tỉ lệ rộng/cao = 1.00
       //   font 1 (YEARFONT): bh=22, bw=21 -> tỉ lệ rộng/cao = 0.95 (chỉ có số 0-9)
-      //   font 2 (sfont26) : bh=19, bw=18 -> tỉ lệ rộng/cao = 0.95
+      //   font 2 (sfont16, TRƯỚC là sfont26) : bh=12, bw=11 -> tỉ lệ rộng/cao = 0.92
       //   font 3 (CLKDIGIT): bh=32, bw=25 -> tỉ lệ rộng/cao = 0.78 (chỉ có số 0-9)
-      layoutFontPx: { 0:10, 1:22, 2:19, 3:32 },
-      layoutCharWidthRatio: { 0:1.00, 1:0.95, 2:0.95, 3:0.77 },
+      layoutFontPx: { 0:10, 1:22, 2:12, 3:32 },
+      layoutCharWidthRatio: { 0:1.00, 1:0.95, 2:0.92, 3:0.77 },
       // Đồng hồ kim (type=5) ĐÃ PORT từ dự án 250x122 (draw_analog_clock() +
       // draw_ellipse_filled/draw_line/bảng sin60-cos60) - bật nút tương ứng.
       layoutHasClock: true,
