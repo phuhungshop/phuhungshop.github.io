@@ -524,20 +524,9 @@
     <progress id="sendProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
   </section>
 
-  <!-- Calibrate -->
-  <section class="card">
-    <h2><span class="idx">05</span> Hiệu chỉnh giờ nhanh</h2>
-    <p class="desc">Cộng/trừ một số giây vào đồng hồ thiết bị mà không cần đồng bộ lại toàn bộ ngày giờ.</p>
-    <div class="cal-row">
-      <label for="calSec">Số giây lệch</label>
-      <input type="number" id="calSec" value="0" step="1">
-      <button id="btnCal" disabled>Áp dụng</button>
-    </div>
-  </section>
-
   <!-- Custom layout designer (TEST) -->
   <section class="card">
-    <h2><span class="idx">06</span> Giao diện tuỳ chỉnh (đang test)</h2>
+    <h2><span class="idx">05</span> Thiết kế đồng hồ</h2>
     <p class="desc">Bấm "+Thêm" để tạo phần tử, kéo-thả trực tiếp trên khung màn hình bên dưới để đặt vị trí. Bấm vào 1 phần tử để chỉnh nội dung/cỡ chữ/màu hoặc xoá. Đồng hồ tự vẽ lại mỗi phút bằng giờ THẬT, không phải ảnh tĩnh. Dùng chung bộ chọn màn hình ở mục 04 phía trên - cả 4 màn (4.2", 2.9", 212×104, 250×122) đều đã hỗ trợ. Riêng "Đồng hồ kim" hiện chỉ có ở 2 màn 2.13".</p>
 
     <div class="layout-toolbar">
@@ -588,7 +577,7 @@
   <!-- Log -->
   <section class="card">
     <div class="log-head">
-      <h2 style="margin:0"><span class="idx">07</span> Nhật ký</h2>
+      <h2 style="margin:0"><span class="idx">06</span> Nhật ký</h2>
       <button class="secondary small" id="btnClearLog">Xoá nhật ký</button>
     </div>
     <div id="log">Đang chờ kết nối thiết bị…</div>
@@ -787,7 +776,6 @@
     $("btnDisconnect").disabled = !connected;
     $("btnSync").disabled = !connected;
     $("btnMode").disabled = !connected;
-    $("btnCal").disabled = !connected;
     updateSendBtn();
     if(typeof updateLayoutSendBtn === "function"){ updateLayoutSendBtn(); }
     if(!connected){
@@ -975,7 +963,10 @@
     try{
       log("Đang mở hộp thoại chọn thiết bị…");
       device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: "DLG-CLOCK" }],
+        // SỬA: mở rộng bộ lọc từ "DLG-CLOCK" (cố định) thành "DLG-" (chung cho mọi loại
+        // màn) - để còn quét thấy được các thiết bị đã đổi tên riêng theo loại màn (VD
+        // "DLG-290-XXXXXX" cho màn 2.9") phục vụ tự nhận diện bên dưới.
+        filters: [{ namePrefix: "DLG-" }],
         optionalServices: [SVC_UUID]
       });
       device.addEventListener("gattserverdisconnected", onDisconnected);
@@ -995,10 +986,38 @@
       setConnectedUI(true);
       log("Kết nối thành công.", "ok");
 
+      // Tự nhận diện loại màn hình qua tên quảng bá Bluetooth (VD "DLG-290-a1b2c3" ->
+      // tự chọn thiết bị "290") - firmware mã hoá loại màn ngay trong tên (xem
+      // user_peripheral.c của từng dự án). Tên kiểu cũ "DLG-CLOCK-XXXXXX" (chưa đổi
+      // sang quy ước mới) thì KHÔNG tự chọn được - giữ nguyên lựa chọn thủ công hiện tại.
+      autoDetectDeviceType(device.name);
+
       if(adcChar){ await readBattery(); }
     }catch(err){
       log("Lỗi kết nối: " + err.message, "err");
       setConnectedUI(false);
+    }
+  }
+
+  // Phân tích tên quảng bá "DLG-<loại>-<hex id>" để tự chọn đúng thiết bị trong DEVICES{}
+  // - so khớp trực tiếp theo key (VD "DLG-290-..." -> key "290"). Không khớp được (tên
+  // kiểu cũ "DLG-CLOCK-..." hoặc thiết bị lạ) thì bỏ qua êm, giữ nguyên lựa chọn hiện tại.
+  function autoDetectDeviceType(name){
+    if(!name) return;
+    const m = name.match(/^DLG-([A-Za-z0-9]+)-/);
+    if(!m) return;
+    const key = m[1];
+    if(key==="CLOCK"){
+      log("Thiết bị dùng tên kiểu cũ, chưa hỗ trợ tự nhận diện - vui lòng tự chọn màn ở mục 04.", "err");
+      return;
+    }
+    if(DEVICES[key]){
+      log(`Tự nhận diện: màn ${DEVICES[key].label} - đã tự chuyển bộ chọn màn hình.`, "ok");
+      const radio = document.querySelector(`input[name=deviceType][value="${key}"]`);
+      if(radio){ radio.checked = true; }
+      applyDevice(key);
+    }else{
+      log(`Tên thiết bị báo loại màn "${key}" nhưng web chưa hỗ trợ - vui lòng tự chọn thủ công ở mục 04.`, "err");
     }
   }
 
@@ -1069,20 +1088,6 @@
   // ---------------------------------------------------------------
   async function switchMode(){
     await writeCommand([0x90], "Đổi giao diện");
-  }
-
-  // ---------------------------------------------------------------
-  // Lệnh 0x92: hiệu chỉnh giờ (3 byte: cmd + int16 LE số giây lệch)
-  // ---------------------------------------------------------------
-  async function calibrate(){
-    let sec = parseInt($("calSec").value, 10);
-    if(isNaN(sec)){ sec = 0; }
-    sec = Math.max(-32768, Math.min(32767, sec));
-    const buf = new Uint8Array(3);
-    buf[0] = 0x92;
-    buf[1] = sec & 0xff;
-    buf[2] = (sec >> 8) & 0xff;
-    await writeCommand(buf, `Hiệu chỉnh ${sec >= 0 ? "+" : ""}${sec}s`);
   }
 
   // ---------------------------------------------------------------
@@ -2145,7 +2150,6 @@
   $("btnDisconnect").addEventListener("click", disconnect);
   $("btnSync").addEventListener("click", syncTime);
   $("btnMode").addEventListener("click", switchMode);
-  $("btnCal").addEventListener("click", calibrate);
   $("btnSend").addEventListener("click", sendImage);
 
   $("canvasOrig").width = IMG_W; $("canvasOrig").height = IMG_H;
