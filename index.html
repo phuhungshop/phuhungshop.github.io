@@ -624,13 +624,16 @@
       hasRed: true,
       chunkSize: 128,
       // Giao diện tuỳ chỉnh (layout) - ĐÃ PORT xong sang firmware 4.2".
-      //   font 0 (sfont)   : bh=10, bw=10 -> tỉ lệ rộng/cao = 1.00
-      //   font 1 (YEARFONT): bh=22, bw=21 -> tỉ lệ rộng/cao = 0.95 (chỉ có số 0-9)
-      //   font 2 (sfont26) : bh=19, bw=18 -> tỉ lệ rộng/cao = 0.95
-      //   font 3 (CLKDIGIT): bh=50, bw=39 -> tỉ lệ rộng/cao = 0.78 (chỉ có số 0-9)
-      // (CLKDIGIT hiện đang ở mức 48px do giới hạn RAM - xem lịch sử chỉnh sửa)
+      //   font 0 (sfont)   : bh=10, bw=8  -> tỉ lệ rộng/cao = 0.80
+      //   font 1 (YEARFONT): bh=22, bw=18 -> tỉ lệ rộng/cao = 0.82 (chỉ có số 0-9)
+      //   font 2 (sfont26) : bh=19, bw=16 -> tỉ lệ rộng/cao = 0.84
+      //   font 3 (CLKDIGIT): bh=32, bw=21 -> tỉ lệ rộng/cao = 0.66 (chỉ có số 0-9)
+      // ĐÃ SỬA: đo trực tiếp lại từ file font thật trong firmware (bdfont dump) - các
+      // tỉ lệ cũ (1.00/0.95/0.95/0.77) bị SAI khá nhiều so với số đo thật, khiến web
+      // ước tính độ rộng chữ SAI khi canh vị trí - đây là nguyên nhân chữ trên thiết bị
+      // hiện lệch/tràn so với khung xem trước trên web (VD ngày-tháng-năm đè lên lịch).
       layoutFontPx: { 0:10, 1:22, 2:19, 3:32 },
-      layoutCharWidthRatio: { 0:1.00, 1:0.95, 2:0.95, 3:0.77 },
+      layoutCharWidthRatio: { 0:0.80, 1:0.82, 2:0.84, 3:0.66 },
       layoutHasClock: false,
       // ĐÃ SỬA: lưới ngày trong "Lịch tháng thật" giờ LUÔN dùng sfont16 (11x12px)
       // ở firmware, không đổi theo "font" người dùng chọn nữa - khớp CHÍNH XÁC
