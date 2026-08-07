@@ -559,7 +559,7 @@
 
     <div id="layoutClockSizePrompt" class="layout-size-prompt" style="display:none;">
       <span style="font-size:11.5px; color:var(--ink-soft);">Bán kính mặt đồng hồ (px thiết bị):</span>
-      <label class="lf">Bán kính <input type="number" id="clockRadius" min="10" max="50" value="35"></label>
+      <label class="lf">Bán kính <input type="number" id="clockRadius" min="10" max="145" value="35"></label>
       <button id="btnClockSizeOk" class="small">Tạo & kéo vào khung</button>
       <button id="btnClockSizeCancel" class="secondary small">Huỷ</button>
     </div>
@@ -1657,9 +1657,17 @@
     const minDeg = m*6;
     const hourDeg = h*30 + m*0.5;
     const r = el.w*zoom;
-    return `<div style="position:relative; width:100%; height:100%; border-radius:50%; border:2px solid #111; box-sizing:border-box; background:#fff;">
-      <div style="position:absolute; left:50%; top:50%; width:2px; height:${Math.round(r*0.55)}px; background:#111; transform-origin:top center; transform:translateX(-50%) rotate(${hourDeg}deg);"></div>
-      <div style="position:absolute; left:50%; top:50%; width:2px; height:${Math.round(r*0.8)}px; background:#111; transform-origin:top center; transform:translateX(-50%) rotate(${minDeg}deg);"></div>
+    const col = layoutColorCss(el.color);
+    // Số giờ 1-12 quanh viền, đặt ở bán kính 78% (khớp đúng tỉ lệ firmware dùng)
+    let numsHtml = "";
+    for(let hh=1; hh<=12; hh++){
+      const ang = (hh%12)*30; // độ, 0=12h ở trên cùng, tăng theo chiều kim đồng hồ
+      numsHtml += `<div style="position:absolute; left:50%; top:50%; font-size:${Math.max(8,Math.round(r*0.16))}px; font-weight:600; color:${col}; transform:translate(-50%,-50%) rotate(${ang}deg) translateY(${-r*0.78}px) rotate(${-ang}deg);">${hh}</div>`;
+    }
+    return `<div style="position:relative; width:100%; height:100%; border-radius:50%; border:2px solid ${col}; box-sizing:border-box; background:#fff;">
+      ${numsHtml}
+      <div style="position:absolute; left:50%; top:50%; width:2px; height:${Math.round(r*0.55)}px; background:${col}; transform-origin:top center; transform:translateX(-50%) rotate(${hourDeg}deg);"></div>
+      <div style="position:absolute; left:50%; top:50%; width:2px; height:${Math.round(r*0.8)}px; background:${col}; transform-origin:top center; transform:translateX(-50%) rotate(${minDeg}deg);"></div>
     </div>`;
   }
 
@@ -1842,11 +1850,14 @@
       $("propH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||24,24,IMG_H); renderLayoutStage(); });
     }else if(el.type===5){
       panel.innerHTML = `
-        <label class="lf">Bán kính <input type="number" id="propRadius" min="10" max="50" value="${el.w}"></label>        <span style="font-size:10px; color:var(--ink-faint); max-width:150px;">Kim đồng hồ luôn màu đen (firmware chưa hỗ trợ đổi màu cho mục này).</span>
+        <label class="lf">Bán kính <input type="number" id="propRadius" min="10" max="145" value="${el.w}"></label>
+        <label class="lf">Màu
+          <select id="propColor">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select>
+        </label>
         <button class="btnDel small">Xoá phần tử</button>
       `;
       $("propRadius").addEventListener("input", (e) => {
-        const r = layoutClamp(parseInt(e.target.value,10)||10,10,50);
+        const r = layoutClamp(parseInt(e.target.value,10)||10,10,145);
         el.w = r; el.h = r;
         renderLayoutStage();
       });
@@ -2011,7 +2022,7 @@
     $("layoutClockSizePrompt").style.display = "none";
   });
   $("btnClockSizeOk").addEventListener("click", () => {
-    const r = layoutClamp(parseInt($("clockRadius").value,10)||35, 10, 50);
+    const r = layoutClamp(parseInt($("clockRadius").value,10)||35, 10, 145);
     layoutElements.push({ type:5, x:r+4, y:r+4, font:0, color:0, bind:0, w:r, h:r });
     layoutSelected = layoutElements.length-1;
     $("layoutClockSizePrompt").style.display = "none";
