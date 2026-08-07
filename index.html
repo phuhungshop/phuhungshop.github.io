@@ -636,7 +636,12 @@
       // ước tính độ rộng chữ SAI khi canh vị trí - đây là nguyên nhân chữ trên thiết bị
       // hiện lệch/tràn so với khung xem trước trên web (VD ngày-tháng-năm đè lên lịch).
       layoutFontPx: { 0:10, 1:22, 2:19, 3:32 },
-      layoutCharWidthRatio: { 0:0.80, 1:0.82, 2:0.84, 3:0.66 },
+      // ĐÃ SỬA: đo lại trực tiếp từ dữ liệu font thật (advance từng ký tự số/dấu
+      // trong sfont.h/yearfont.h/sfont26.h/clkdigit.h) - các tỉ lệ cũ đều THẤP
+      // hơn thực tế khá nhiều (đặc biệt font 0 và font 1), khiến web ước tính
+      // chữ hẹp hơn thật, dẫn đến chữ trên thiết bị tràn/đè lên phần tử khác
+      // mà web không cảnh báo trước được.
+      layoutCharWidthRatio: { 0:0.925, 1:0.955, 2:0.877, 3:0.699 },
       layoutHasClock: false,
       // "Khung" (type=2/3) gây lỗi phần cứng (ghosting/mất khung khi 2 khung
       // chung toạ độ x hoặc y) không sửa được triệt để bằng firmware trên
