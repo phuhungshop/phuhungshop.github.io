@@ -635,6 +635,10 @@
       layoutFontPx: { 0:10, 1:22, 2:19, 3:32 },
       layoutCharWidthRatio: { 0:0.80, 1:0.82, 2:0.84, 3:0.66 },
       layoutHasClock: false,
+      // "Khung" (type=2/3) gây lỗi phần cứng (ghosting/mất khung khi 2 khung
+      // chung toạ độ x hoặc y) không sửa được triệt để bằng firmware trên
+      // riêng tấm nền 4.2" này - tắt hẳn tính năng thêm khung cho màn này.
+      layoutHasBox: false,
       // ĐÃ SỬA: lưới ngày trong "Lịch tháng thật" giờ LUÔN dùng sfont16 (11x12px)
       // ở firmware, không đổi theo "font" người dùng chọn nữa - khớp CHÍNH XÁC
       // draw_calendar_panel() gốc (giao diện 2/3, dùng chung font này). Trước đó
@@ -832,6 +836,23 @@
       }
     }
 
+    // "Khung" (type=2/3) trên màn 4.2" gây lỗi phần cứng không thể sửa hoàn
+    // toàn bằng firmware: 2 khung/chữ có chung khoảng toạ độ x hoặc y (dù
+    // không chạm nhau) có thể làm mất nhau sau khi cập nhật giờ - đặc tính
+    // vật lý của tấm nền, không phải lỗi logic. Ẩn hẳn nút "+ Thêm khung" và
+    // tự xoá các khung cũ khi chuyển sang màn 4.2" để tránh người dùng vô
+    // tình tạo lại thiết kế lỗi. Các màn khác (2.9", 2.13", 250x122) không
+    // gặp lỗi này (2.9" dùng bộ đệm đỏ thật, không qua cơ chế red_mirror).
+    $("btnAddBox").style.display = currentDevice.layoutHasBox===false ? "none" : "";
+    if(currentDevice.layoutHasBox===false && typeof layoutElements !== "undefined"){
+      const beforeBox = layoutElements.length;
+      layoutElements = layoutElements.filter(el => el.type!==2 && el.type!==3);
+      if(layoutElements.length < beforeBox){
+        log(`Màn ${currentDevice.label}: "Thêm khung" đã bị tắt do lỗi phần cứng - đã bỏ ${beforeBox-layoutElements.length} khung khỏi thiết kế.`, "err");
+        layoutSelected = -1;
+      }
+    }
+
     log(`Đã chọn màn ${currentDevice.label} (${IMG_W}×${IMG_H}${currentDevice.hasRed?", 3 màu":", đen-trắng"}).`);
 
     if(lastLoadedImg){ processImage(lastLoadedImg); }
@@ -840,6 +861,10 @@
   document.querySelectorAll('input[name=deviceType]').forEach((el) => {
     el.addEventListener("change", (e) => applyDevice(e.target.value));
   });
+  // Gọi 1 lần lúc tải trang để áp dụng đúng cấu hình màn mặc định (42) ngay
+  // từ đầu - trước đây applyDevice() chỉ chạy khi người dùng đổi màn, khiến
+  // nút "+ Thêm khung" vẫn hiện sai lúc mới vào trang dù màn mặc định là 4.2".
+  applyDevice("42");
 
   // Đồng hồ hệ thống + xem trước - chạy độc lập, không cần kết nối
   function tickPreview(){
