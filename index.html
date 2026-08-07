@@ -642,7 +642,9 @@
       // chữ hẹp hơn thật, dẫn đến chữ trên thiết bị tràn/đè lên phần tử khác
       // mà web không cảnh báo trước được.
       layoutCharWidthRatio: { 0:0.925, 1:0.955, 2:0.877, 3:0.699 },
-      layoutHasClock: false,
+      // ĐÃ BẬT: firmware giờ đã hỗ trợ vẽ đồng hồ kim (type=5) cho màn 4.2" -
+      // dùng lại draw_clock_hand() sẵn có, co giãn theo đúng kích thước khung.
+      layoutHasClock: true,
       // "Khung" (type=2/3) gây lỗi phần cứng (ghosting/mất khung khi 2 khung
       // chung toạ độ x hoặc y) không sửa được triệt để bằng firmware trên
       // riêng tấm nền 4.2" này - tắt hẳn tính năng thêm khung cho màn này.
