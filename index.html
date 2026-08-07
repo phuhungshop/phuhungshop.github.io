@@ -531,7 +531,10 @@
 
     <div class="layout-toolbar">
       <button id="btnAddText" class="secondary">+ Thêm chữ</button>
-      <button id="btnAddBox" class="secondary">+ Thêm khung</button>
+      <button id="btnAddBox" class="secondary" style="display:none">+ Thêm khung</button>
+      <!-- Mặc định ẩn sẵn (màn 4.2" là lựa chọn mặc định, không hỗ trợ khung
+           do lỗi phần cứng) - applyDevice() trong script sẽ tự hiện lại nút
+           này nếu người dùng chuyển sang màn khác có hỗ trợ. -->
       <button id="btnAddCalendar" class="secondary">+ Lịch tháng thật</button>
       <button id="btnAddClock" class="secondary">+ Đồng hồ kim</button>
       <button id="btnAddHBar" class="secondary">+ Thanh ngang</button>
@@ -861,10 +864,11 @@
   document.querySelectorAll('input[name=deviceType]').forEach((el) => {
     el.addEventListener("change", (e) => applyDevice(e.target.value));
   });
-  // Gọi 1 lần lúc tải trang để áp dụng đúng cấu hình màn mặc định (42) ngay
-  // từ đầu - trước đây applyDevice() chỉ chạy khi người dùng đổi màn, khiến
-  // nút "+ Thêm khung" vẫn hiện sai lúc mới vào trang dù màn mặc định là 4.2".
-  applyDevice("42");
+  // (Không gọi applyDevice() sớm ở đây nữa - làm vậy chạy trước khi các phần
+  // khác của trang kịp khởi tạo xong, gây lỗi hỏng luôn phần gửi ảnh. Nút
+  // "+ Thêm khung" cho màn 4.2" mặc định đã được ẩn sẵn bằng HTML tĩnh ở trên
+  // (xem thuộc tính style="display:none" tại nơi khai báo nút), không cần
+  // chạy JS lúc tải trang nữa.
 
   // Đồng hồ hệ thống + xem trước - chạy độc lập, không cần kết nối
   function tickPreview(){
@@ -1583,7 +1587,11 @@
   function layoutBindPreviewText(bind){
     const now = new Date();
     const pad = (n) => String(n).padStart(2,"0");
-    const wdayFull = ["Chủ nhật","Thứ hai","Thứ ba","Thứ tư","Thứ năm","Thứ sáu","Thứ bảy"][now.getDay()];
+    // ĐÃ SỬA: firmware wday_full[] luôn viết HOA TOÀN BỘ ("THỨ SÁU", không
+    // phải "Thứ sáu") - trước đây preview web dùng chữ thường/hoa đầu câu,
+    // khiến bản xem trước khác hẳn thiết bị thật. wdayShort (CN/T2/T3...)
+    // vốn đã hoa sẵn nên không cần đổi.
+    const wdayFull = ["Chủ nhật","Thứ hai","Thứ ba","Thứ tư","Thứ năm","Thứ sáu","Thứ bảy"][now.getDay()].toUpperCase();
     const wdayShort = ["CN","T2","T3","T4","T5","T6","T7"][now.getDay()];
     switch(bind){
       case 0: return `${pad(now.getHours())}:${pad(now.getMinutes())}`;
