@@ -300,6 +300,12 @@
       repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0 1px, transparent 1px 20px);
   }
   .free-el img, .free-el canvas{ width:100%; height:100%; display:block; pointer-events:none; }
+  .free-el-input{
+    position:absolute; z-index:20; box-sizing:border-box;
+    font-family:"Segoe UI", Arial, sans-serif; line-height:1.25;
+    padding:0 3px; border:1px dashed var(--stamp-green); border-radius:2px;
+    background:rgba(255,255,255,0.92); outline:none;
+  }
 
 
   /* ---------- Device picker ---------- */
@@ -2323,6 +2329,11 @@
   let freeSelected = -1;
   let freeBgImg = null;    // HTMLImageElement hoặc null - luôn full khung, dưới cùng
   let freeDrag = null;
+  // Chỉ số phần tử CHỮ đang được gõ trực tiếp trên khung ảnh (không phải
+  // -1 nghĩa là freeRenderStage() sẽ vẽ 1 ô <input> thật ngay đúng vị trí
+  // của phần tử đó thay vì 1 div tĩnh - xem giải thích đầy đủ ở
+  // freeRenderStage()).
+  let freeEditingIdx = -1;
   let freePackedImage = null;
 
   function freeZoom(){
@@ -2495,6 +2506,49 @@
     }
 
     freeElements.forEach((el, idx) => {
+      // Phần tử CHỮ đang ở chế độ gõ trực tiếp trên khung ảnh: vẽ 1 ô
+      // <input> THẬT đúng ngay vị trí của nó thay vì 1 div tĩnh - KHÔNG
+      // gọi freeRenderStage() trên mỗi lần gõ (chỉ tự nới rộng input),
+      // nên con trỏ/focus không bao giờ bị mất giữa chừng khi gõ liên tục
+      // (đây chính là lỗi cũ: trước đây ô nhập nằm ở bảng thuộc tính riêng,
+      // mỗi ký tự gõ vào lại re-render lại TOÀN BỘ bảng đó bằng innerHTML
+      // -> tạo ra 1 <input> DOM mới, ô cũ đang có focus bị thay thế nên
+      // gõ được đúng 1 nhịp là mất focus, phải bấm lại vào ô mới gõ tiếp).
+      if(el.type==="text" && idx===freeEditingIdx){
+        const bounds = freeElBounds(el);
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "free-el-input";
+        input.value = el.text;
+        input.style.left = (el.x*zoom)+"px";
+        input.style.top  = (el.y*zoom)+"px";
+        input.style.minWidth = Math.max(40, bounds.w*zoom)+"px";
+        input.style.height = (bounds.h*zoom)+"px";
+        input.style.fontSize = (el.fontSize*zoom)+"px";
+        input.style.fontWeight = el.bold ? "700" : "400";
+        input.style.color = layoutColorCss(el.color);
+        input.addEventListener("input", (e) => {
+          el.text = e.target.value;
+          // Chỉ tự nới rộng đúng ô input này theo nội dung mới gõ - KHÔNG
+          // render lại cả khung (xem giải thích ở trên).
+          const b2 = freeElBounds(el);
+          input.style.minWidth = Math.max(40, b2.w*zoom)+"px";
+        });
+        input.addEventListener("keydown", (e) => {
+          if(e.key === "Enter"){ e.preventDefault(); input.blur(); }
+        });
+        input.addEventListener("pointerdown", (e) => e.stopPropagation());
+        input.addEventListener("blur", () => {
+          if(!el.text.trim()) el.text = "Chữ mới";
+          freeClampFree(el);
+          freeEditingIdx = -1;
+          freeRenderStage();
+        });
+        stage.appendChild(input);
+        setTimeout(() => { input.focus(); input.select(); }, 0);
+        return;
+      }
+
       const div = document.createElement("div");
       div.className = "layout-el free-el";
       if(idx===freeSelected) div.classList.add("selected");
@@ -2513,6 +2567,9 @@
         div.style.color = layoutColorCss(el.color);
         div.style.whiteSpace = "nowrap";
         div.style.justifyContent = "flex-start";
+        // Gõ đúp (hoặc bấm "Sửa nội dung" ở bảng thuộc tính bên dưới) để
+        // vào lại chế độ gõ trực tiếp trên khung ảnh.
+        div.addEventListener("dblclick", (e) => { e.stopPropagation(); freeStartTextEdit(idx); });
       }else if(el.type==="image" && el.img){
         const img = document.createElement("img");
         img.src = el.img.src;
@@ -2577,8 +2634,17 @@
   }
 
   $("freeStage").addEventListener("pointerdown", (e) => {
-    if(e.target.id==="freeStage"){ freeSelected = -1; freeRenderStage(); }
+    if(e.target.id==="freeStage"){ freeSelected = -1; freeEditingIdx = -1; freeRenderStage(); }
   });
+
+  // Bật chế độ gõ trực tiếp trên khung ảnh cho phần tử chữ idx - gọi khi
+  // vừa bấm "+ Chữ", gõ đúp vào 1 chữ có sẵn, hoặc bấm "Sửa nội dung" ở
+  // bảng thuộc tính.
+  function freeStartTextEdit(idx){
+    freeSelected = idx;
+    freeEditingIdx = idx;
+    freeRenderStage();
+  }
 
   function freeLayerButtonsHtml(){
     return `
@@ -2603,10 +2669,24 @@
     panel.style.display = "flex";
 
     if(el.type==="text"){
+      if(freeEditingIdx === freeSelected){
+        // Đang gõ trực tiếp trên khung ảnh (xem ô <input> nổi ngay trên
+        // khung hình phía trên) - ẩn bớt các nút khác để khỏi render đè
+        // lên ô đang gõ, chỉ để lại nút xoá.
+        panel.innerHTML = `
+          <span style="font-size:11.5px; color:var(--ink-soft);">Đang gõ trực tiếp trên khung ảnh phía trên - gõ xong bấm ra ngoài hoặc nhấn Enter.</span>
+          <button class="btnDel small">Xoá phần tử</button>
+        `;
+        panel.querySelector(".btnDel").addEventListener("click", () => {
+          freeElements.splice(freeSelected, 1);
+          freeSelected = -1;
+          freeEditingIdx = -1;
+          freeRenderStage();
+        });
+        return;
+      }
       panel.innerHTML = `
-        <label class="lf">Nội dung
-          <input type="text" id="freePropText" value="${el.text.replace(/"/g,"&quot;")}" style="font-family:var(--font-mono); font-size:12px; border:1px solid var(--rule); border-radius:6px; padding:6px 7px; width:170px;">
-        </label>
+        <button type="button" class="secondary small" id="freeBtnEditText">✎ Sửa nội dung (gõ trực tiếp trên khung ảnh)</button>
         <label class="lf">Cỡ chữ <input type="number" id="freePropSize" min="8" max="120" value="${el.fontSize}"></label>
         <label class="lf">Màu <select id="freePropColor">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select></label>
         <label class="lf" style="flex-direction:row; align-items:center; gap:4px;">
@@ -2615,7 +2695,7 @@
         ${freeLayerButtonsHtml()}
         <button class="btnDel small">Xoá phần tử</button>
       `;
-      $("freePropText").addEventListener("input", (e) => { el.text = e.target.value; freeClampFree(el); freeRenderStage(); });
+      $("freeBtnEditText").addEventListener("click", () => freeStartTextEdit(freeSelected));
       $("freePropSize").addEventListener("input", (e) => { el.fontSize = layoutClamp(parseInt(e.target.value,10)||16, 8, 120); freeClampFree(el); freeRenderStage(); });
       $("freePropColor").addEventListener("change", (e) => { el.color = parseInt(e.target.value,10); freeRenderStage(); });
       $("freePropBold").addEventListener("change", (e) => { el.bold = e.target.checked; freeRenderStage(); });
@@ -2675,9 +2755,12 @@
 
   $("btnFreeAddText").addEventListener("click", () => {
     if(freeElements.length >= FREE_MAX_ELEMENTS){ log(`Đã đạt tối đa ${FREE_MAX_ELEMENTS} phần tử tự do.`, "err"); return; }
-    freeElements.push({ type:"text", x:10, y:10, text:"Chữ mới", fontSize:24, color:0, bold:false });
-    freeSelected = freeElements.length-1;
-    freeRenderStage();
+    // Thêm xong vào NGAY chế độ gõ trực tiếp trên khung ảnh (ô input nổi
+    // đúng vị trí phần tử) - không cần bấm thêm vào đâu khác mới gõ được,
+    // đúng như yêu cầu "bấm nút Chữ là hiện ra ô nhập nội dung ngay trên
+    // khung ảnh".
+    freeElements.push({ type:"text", x:10, y:10, text:"", fontSize:24, color:0, bold:false });
+    freeStartTextEdit(freeElements.length-1);
   });
 
   $("btnFreeAddImage").addEventListener("click", () => $("freeImageInput").click());
