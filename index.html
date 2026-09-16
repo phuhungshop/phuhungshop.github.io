@@ -2350,7 +2350,14 @@
     const ctx = c.getContext("2d");
     ctx.font = `${el.bold?"700":"400"} ${el.fontSize}px "Segoe UI", Arial, sans-serif`;
     const m = ctx.measureText(el.text || " ");
-    return { w: Math.max(4, Math.ceil(m.width)), h: Math.ceil(el.fontSize*1.25) };
+    // +3px đệm an toàn cho bề rộng: measureText() đo ĐỘ RỘNG DI CHUYỂN CON
+    // TRỎ (advance width) chứ không phải mực chữ thực tế - vài ký tự có
+    // dấu tiếng Việt (ví dụ ký tự in nghiêng/đậm, dấu ơ/ư, ă/â) có thể vẽ
+    // tràn ra ngoài 1-2px so với con số này. Khung xem trước ở
+    // freeRenderStage() vẽ chữ vào 1 <canvas> đúng bằng kích thước đo
+    // được (để khớp pixel với ảnh gửi thật) - không đệm dư sẽ có nguy cơ
+    // bị cắt mất viền phải của chữ trong lúc xem trước.
+    return { w: Math.max(4, Math.ceil(m.width)+3), h: Math.ceil(el.fontSize*1.25) };
   }
 
   function freeElBounds(el){
@@ -2559,14 +2566,27 @@
       div.style.height = (bounds.h*zoom)+"px";
 
       if(el.type==="text"){
-        div.textContent = el.text;
-        div.style.fontSize = (el.fontSize*zoom)+"px";
-        div.style.lineHeight = (bounds.h*zoom)+"px";
-        div.style.fontWeight = el.bold ? "700" : "400";
-        div.style.fontFamily = '"Segoe UI", Arial, sans-serif';
-        div.style.color = layoutColorCss(el.color);
-        div.style.whiteSpace = "nowrap";
-        div.style.justifyContent = "flex-start";
+        // ĐÃ SỬA (lệch vị trí so với thiết bị thật): TRƯỚC ĐÂY khung xem
+        // trước vẽ chữ bằng 1 div CSS thường - div này kế thừa
+        // "display:flex; align-items:center" từ .layout-el nên chữ tự
+        // canh GIỮA theo chiều dọc trong khung. Còn ảnh THẬT gửi xuống
+        // thiết bị (freeComposite() bên dưới) lại vẽ bằng canvas với
+        // ctx.textBaseline="top" - canh chữ theo ĐỈNH, không phải giữa.
+        // 2 cách canh khác nhau này khiến vị trí chữ trên web và trên máy
+        // thật lệch nhau khá nhiều (đúng như ảnh "I ❤ U" bạn chụp). Nay
+        // xem trước cũng vẽ bằng CANVAS, dùng ĐÚNG same font-string/
+        // textBaseline="top"/fillText như freeComposite() - đảm bảo khớp
+        // pixel-cho-pixel giữa xem trước và ảnh gửi thật, đúng trên cả 4
+        // loại màn hình (chỉ khác nhau ở hệ số zoom).
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(bounds.w*zoom));
+        c.height = Math.max(1, Math.round(bounds.h*zoom));
+        const tctx = c.getContext("2d");
+        tctx.fillStyle = layoutColorCss(el.color);
+        tctx.font = `${el.bold?"700":"400"} ${el.fontSize*zoom}px "Segoe UI", Arial, sans-serif`;
+        tctx.textBaseline = "top";
+        tctx.fillText(el.text, 0, 0);
+        div.appendChild(c);
         // Gõ đúp (hoặc bấm "Sửa nội dung" ở bảng thuộc tính bên dưới) để
         // vào lại chế độ gõ trực tiếp trên khung ảnh.
         div.addEventListener("dblclick", (e) => { e.stopPropagation(); freeStartTextEdit(idx); });
