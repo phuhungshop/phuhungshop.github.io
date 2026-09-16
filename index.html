@@ -284,6 +284,23 @@
     margin-left:auto; background:transparent; color:var(--stamp-rust); border-color:var(--stamp-rust);
   }
 
+  /* ---------- Thiết kế ảnh tự do - dùng lại đúng bố cục/kiểu dáng của
+       khung "Thiết kế đồng hồ" ở trên (#layoutStageWrap/#layoutStage,
+       .layout-el, .layout-props) để đồng bộ giao diện toàn trang. ---------- */
+  #freeStageWrap{
+    background:#d9d4c6; border-radius:10px; padding:16px;
+    display:flex; justify-content:center; overflow-x:auto;
+    margin-top:6px;
+  }
+  #freeStage{
+    position:relative; background:#fff; box-shadow:0 2px 10px rgba(30,26,15,0.25);
+    flex-shrink:0; touch-action:none;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.05) 0 1px, transparent 1px 20px),
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0 1px, transparent 1px 20px);
+  }
+  .free-el img, .free-el canvas{ width:100%; height:100%; display:block; pointer-events:none; }
+
 
   /* ---------- Device picker ---------- */
   .device-picker{
@@ -528,11 +545,73 @@
       <button id="btnSend" class="wide" disabled>Gửi ảnh lên màn hình</button>
     </div>
     <progress id="sendProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
+    <p class="desc" style="margin-top:14px;">Lưu ý: nếu màn hình E-ink không thay đổi khi gửi ảnh, vui lòng bấm "Đổi giao diện" rồi thử lại!</p>
+  </section>
+
+  <!-- Thiết kế ảnh tự do - chèn chữ/ảnh/logo/biểu tượng/ảnh nền tuỳ ý, tự
+       ghép lại 1 ảnh rồi gửi bằng ĐÚNG giao thức ảnh (0x96/0x97) như mục 04
+       phía trên - KHÁC với "Thiết kế đồng hồ" bên dưới (0x98/0x99, chỉ vài
+       loại phần tử cố định gắn với đồng hồ/lịch). -->
+  <section class="card">
+    <h2><span class="idx">05</span> Thiết kế ảnh tự do</h2>
+    <p class="desc">Tự do chèn chữ, ảnh/logo, biểu tượng và ảnh nền vào đúng khung màn hình đang chọn ở mục 04 phía trên - kéo để đổi vị trí, chỉnh số trong bảng thuộc tính để đổi kích thước/nội dung. Xong bấm "Gửi xuống thiết bị" - trang sẽ tự ghép mọi thứ lại thành 1 ảnh rồi xử lý/gửi đi giống hệt cách gửi ảnh ở mục 04 (dùng chung 1 thuật toán duy nhất).</p>
+
+    <div class="layout-toolbar">
+      <button id="btnFreeAddText" class="secondary">+ Chữ</button>
+      <button id="btnFreeAddImage" class="secondary">+ Ảnh, Logo</button>
+      <input type="file" id="freeImageInput" accept="image/*">
+      <button id="btnFreeAddIcon" class="secondary">+ Biểu tượng</button>
+      <button id="btnFreeAddBg" class="secondary">+ Ảnh nền</button>
+      <input type="file" id="freeBgInput" accept="image/*">
+      <button id="btnFreeRemoveBg" class="secondary" style="display:none;">Xoá ảnh nền</button>
+      <button id="btnFreeTuning" class="secondary">⚙️ Tinh chỉnh ảnh</button>
+      <span id="freeCountLabel" style="font-size:11.5px; color:var(--ink-faint); margin-left:auto;">0 phần tử</span>
+    </div>
+
+    <div id="freeIconPicker" class="layout-size-prompt" style="display:none;"></div>
+
+    <div id="freeTuningPanel" style="display:none;">
+      <div class="opt-row">
+        <label><input type="radio" name="freefitmode" value="cover" checked> Lấp đầy khung (cắt bớt)</label>
+        <label><input type="radio" name="freefitmode" value="contain"> Vừa khung (viền trắng)</label>
+        <label><input type="radio" name="freefitmode" value="stretch"> Co giãn vừa khít (không cắt, không viền)</label>
+      </div>
+      <p style="font-size:10.5px; color:var(--ink-faint); margin:-8px 0 10px;">(áp dụng cho ảnh nền, nếu có)</p>
+      <div class="opt-row">
+        <label><input type="range" id="freeThreshRange" min="-60" max="60" value="0" style="width:140px"> Điều chỉnh độ sáng/tối</label>
+      </div>
+      <div class="opt-row">
+        <label><input type="range" id="freeAgingLevel" min="0" max="100" value="0" style="width:140px"> Mức lão hóa màn hình (bù tương phản)</label>
+      </div>
+      <div class="opt-row">
+        <label><input type="range" id="freeBlackPoint" min="0" max="120" value="0" style="width:140px"> Tăng điểm đen (giữ nguyên vùng sáng)</label>
+      </div>
+      <div class="opt-row">
+        <label><input type="checkbox" id="freeGraphicMode"> Ảnh nhiều chữ/đồ hoạ (tắt rắc điểm, chọn màu đặc)</label>
+      </div>
+      <div class="opt-row red-only" id="freeRedReduceRow">
+        <label><input type="range" id="freeRedReduce" min="0" max="100" value="0" style="width:140px"> Giảm lượng đỏ</label>
+      </div>
+    </div>
+
+    <div id="freeStageWrap">
+      <div id="freeStage"></div>
+    </div>
+    <p style="font-size:10.5px; color:var(--ink-faint); margin:6px 0 0;">Khung xem trước phóng to - kéo phần tử để đổi vị trí, bấm chọn để hiện bảng thuộc tính bên dưới.</p>
+
+    <div id="freePropsPanel" class="layout-props" style="display:none;"></div>
+
+    <div class="connect-row" style="margin-top:14px; gap:8px; flex-wrap:wrap;">
+      <button id="btnFreeClear" class="secondary">Xoá hết</button>
+      <button id="btnFreeSend" class="wide" disabled>Gửi xuống thiết bị</button>
+    </div>
+    <progress id="freeSendProgress" value="0" max="100" style="display:none; margin-top:10px"></progress>
+    <p class="desc" style="margin-top:14px;">Lưu ý: nếu màn hình E-ink không thay đổi khi gửi ảnh, vui lòng bấm "Đổi giao diện" rồi thử lại!</p>
   </section>
 
   <!-- Custom layout designer (TEST) -->
   <section class="card">
-    <h2><span class="idx">05</span> Thiết kế đồng hồ</h2>
+    <h2><span class="idx">06</span> Thiết kế đồng hồ</h2>
     <p class="desc">Bấm "+Thêm" để tạo phần tử, kéo-thả trực tiếp trên khung màn hình bên dưới để đặt vị trí. Bấm vào 1 phần tử để chỉnh nội dung/cỡ chữ/màu hoặc xoá. Đồng hồ tự vẽ lại mỗi phút bằng giờ THẬT, không phải ảnh tĩnh. Dùng chung bộ chọn màn hình ở mục 04 phía trên - cả 4 màn (4.2", 2.9", 212×104, 250×122) đều đã hỗ trợ. Riêng "Đồng hồ kim" hiện chỉ có ở 2 màn 2.13".</p>
 
     <div class="layout-toolbar">
@@ -586,7 +665,7 @@
   <!-- Log -->
   <section class="card">
     <div class="log-head">
-      <h2 style="margin:0"><span class="idx">06</span> Nhật ký</h2>
+      <h2 style="margin:0"><span class="idx">07</span> Nhật ký</h2>
       <button class="secondary small" id="btnClearLog">Xoá nhật ký</button>
     </div>
     <div id="log">Đang chờ kết nối thiết bị…</div>
@@ -801,6 +880,7 @@
     $("btnMode").disabled = !connected;
     updateSendBtn();
     if(typeof updateLayoutSendBtn === "function"){ updateLayoutSendBtn(); }
+    if(typeof updateFreeSendBtn === "function"){ updateFreeSendBtn(); }
     if(!connected){
       $("devName").textContent = "—";
       $("devVolt").textContent = "— V";
@@ -834,10 +914,27 @@
 
     const redRow = $("redReduceRow");
     redRow.classList.toggle("disabled", !currentDevice.hasRed);
+    const freeRedRow = $("freeRedReduceRow");
+    if(freeRedRow){ freeRedRow.classList.toggle("disabled", !currentDevice.hasRed); }
 
     packedImage = null;
     $("previewGrid").style.display = "none";
     updateSendBtn();
+
+    // Thiết kế ảnh tự do dùng chung khung IMG_W×IMG_H với mục 04 - khi đổi
+    // sang màn NHỎ HƠN, ép lại vị trí/kích thước các phần tử đang có để
+    // không bị tràn ra ngoài khung mới (ảnh nền tự fit lại theo chế độ đã
+    // chọn, không cần xử lý riêng).
+    if(typeof freeElements !== "undefined"){
+      freeElements.forEach(el => {
+        if(el.type==="image" || el.type==="icon"){
+          el.w = Math.min(el.w, IMG_W);
+          el.h = Math.min(el.h, IMG_H);
+        }
+        freeClampFree(el);
+      });
+    }
+    if(typeof freeRenderStage === "function"){ freeRenderStage(); }
 
     // Đồng hồ kim (type=5) chưa được firmware 4.2" hỗ trợ - ẩn nút thêm,
     // và loại bỏ luôn phần tử đồng hồ kim cũ (nếu có) khi chuyển sang màn
@@ -2197,6 +2294,579 @@
 
   renderLayoutStage();
   setInterval(tickLayoutClockText, 1000);
+
+  // =================================================================
+  // THIẾT KẾ ẢNH TỰ DO - chèn chữ/ảnh/logo/biểu tượng/ảnh nền tuỳ ý ở
+  // vị trí/kích thước bất kỳ, KHÁC với "Thiết kế đồng hồ" ở trên (bộ phần
+  // tử cố định gắn với giờ/lịch, gửi bằng giao thức layout riêng 0x98/
+  // 0x99). Ở đây mọi thứ được GHÉP LẠI thành đúng 1 ảnh bitmap rồi gửi
+  // bằng ĐÚNG giao thức ảnh 0x96/0x97 của mục 04 - dùng lại NGUYÊN VẸN
+  // các hàm xử lý ảnh đã có (drawFitted/autoContrast/applyGamma/
+  // applyBlackPoint/sharpen/ditherAndPack) để đảm bảo chỉ có 1 thuật toán
+  // duy nhất trên toàn trang, không viết lại công thức riêng có thể lệch
+  // kết quả so với mục 04.
+  // =================================================================
+
+  const FREE_ICON_LIST = [
+    { value:"star",   label:"★ Ngôi sao" },
+    { value:"heart",  label:"♥ Trái tim" },
+    { value:"sun",    label:"☀ Mặt trời" },
+    { value:"moon",   label:"☾ Mặt trăng" },
+    { value:"bell",   label:"🔔 Chuông" },
+    { value:"bolt",   label:"⚡ Tia chớp" },
+    { value:"smiley", label:"☺ Mặt cười" },
+    { value:"drop",   label:"💧 Giọt nước" },
+  ];
+  const FREE_MAX_ELEMENTS = 30;
+
+  let freeElements = [];   // {type:"text"|"image"|"icon", x,y, ...}
+  let freeSelected = -1;
+  let freeBgImg = null;    // HTMLImageElement hoặc null - luôn full khung, dưới cùng
+  let freeDrag = null;
+  let freePackedImage = null;
+
+  function freeZoom(){
+    const wrap = $("freeStageWrap");
+    const availW = Math.max(100, wrap.clientWidth - 32);
+    let z = Math.floor(availW / IMG_W);
+    if(z < 1) z = 1;
+    if(z > 4) z = 4;
+    return z;
+  }
+
+  function freeMeasureText(el){
+    const c = document.createElement("canvas");
+    const ctx = c.getContext("2d");
+    ctx.font = `${el.bold?"700":"400"} ${el.fontSize}px "Segoe UI", Arial, sans-serif`;
+    const m = ctx.measureText(el.text || " ");
+    return { w: Math.max(4, Math.ceil(m.width)), h: Math.ceil(el.fontSize*1.25) };
+  }
+
+  function freeElBounds(el){
+    if(el.type==="text") return freeMeasureText(el);
+    return { w: el.w, h: el.h };
+  }
+
+  function freeClampFree(el){
+    const bounds = freeElBounds(el);
+    const maxX = Math.max(0, IMG_W-bounds.w), maxY = Math.max(0, IMG_H-bounds.h);
+    el.x = layoutClamp(el.x, 0, maxX);
+    el.y = layoutClamp(el.y, 0, maxY);
+  }
+
+  // ---- Vẽ biểu tượng bằng canvas path (KHÔNG dùng emoji - emoji hiển thị
+  // khác nhau tuỳ trình duyệt/hệ điều hành và có màu, không hợp để rắc
+  // điểm/đổ 2-3 màu cho e-ink) - dùng CHUNG 1 hàm cho cả khung xem trước
+  // (canvas nhỏ trong #freeStage) và ảnh ghép cuối cùng gửi xuống thiết bị,
+  // đảm bảo xem trước khớp 100% với ảnh thật gửi đi. ----
+  function drawFreeIcon(ctx, kind, x, y, w, h, color){
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    const cx = w/2, cy = h/2, r = Math.min(w,h)/2;
+    ctx.lineWidth = Math.max(1, r*0.12);
+    switch(kind){
+      case "star": freeDrawStar(ctx,cx,cy,r); break;
+      case "heart": freeDrawHeart(ctx,cx,cy,r); break;
+      case "sun": freeDrawSun(ctx,cx,cy,r); break;
+      case "moon": freeDrawMoon(ctx,cx,cy,r); break;
+      case "bell": freeDrawBell(ctx,cx,cy,r); break;
+      case "bolt": freeDrawBolt(ctx,cx,cy,r); break;
+      case "smiley": freeDrawSmiley(ctx,cx,cy,r); break;
+      case "drop": freeDrawDrop(ctx,cx,cy,r); break;
+    }
+    ctx.restore();
+  }
+  function freeDrawStar(ctx,cx,cy,r){
+    ctx.beginPath();
+    const spikes=5, outerR=r, innerR=r*0.45;
+    let rot = Math.PI/2*3;
+    const step = Math.PI/spikes;
+    ctx.moveTo(cx, cy-outerR);
+    for(let i=0;i<spikes;i++){
+      let x = cx + Math.cos(rot)*outerR, y = cy + Math.sin(rot)*outerR;
+      ctx.lineTo(x,y); rot+=step;
+      x = cx + Math.cos(rot)*innerR; y = cy + Math.sin(rot)*innerR;
+      ctx.lineTo(x,y); rot+=step;
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  function freeDrawHeart(ctx,cx,cy,r){
+    ctx.beginPath();
+    ctx.moveTo(cx, cy+r*0.75);
+    ctx.bezierCurveTo(cx-r*1.1, cy-r*0.2, cx-r*0.5, cy-r*1.1, cx, cy-r*0.35);
+    ctx.bezierCurveTo(cx+r*0.5, cy-r*1.1, cx+r*1.1, cy-r*0.2, cx, cy+r*0.75);
+    ctx.closePath();
+    ctx.fill();
+  }
+  function freeDrawSun(ctx,cx,cy,r){
+    ctx.beginPath();
+    ctx.arc(cx,cy,r*0.5,0,Math.PI*2);
+    ctx.fill();
+    for(let i=0;i<8;i++){
+      const ang = i*Math.PI/4;
+      ctx.beginPath();
+      ctx.moveTo(cx+Math.cos(ang)*r*0.65, cy+Math.sin(ang)*r*0.65);
+      ctx.lineTo(cx+Math.cos(ang)*r*0.98, cy+Math.sin(ang)*r*0.98);
+      ctx.stroke();
+    }
+  }
+  function freeDrawMoon(ctx,cx,cy,r){
+    ctx.beginPath();
+    ctx.arc(cx,cy,r*0.9,0,Math.PI*2);
+    ctx.fill();
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(cx+r*0.5,cy-r*0.15,r*0.75,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+  function freeDrawBell(ctx,cx,cy,r){
+    ctx.beginPath();
+    ctx.arc(cx, cy-r*0.1, r*0.65, Math.PI, 0, false);
+    ctx.lineTo(cx+r*0.75, cy+r*0.55);
+    ctx.lineTo(cx-r*0.75, cy+r*0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy+r*0.75, r*0.14, 0, Math.PI*2);
+    ctx.fill();
+  }
+  function freeDrawBolt(ctx,cx,cy,r){
+    ctx.beginPath();
+    ctx.moveTo(cx+r*0.15, cy-r);
+    ctx.lineTo(cx-r*0.55, cy+r*0.15);
+    ctx.lineTo(cx-r*0.05, cy+r*0.15);
+    ctx.lineTo(cx-r*0.15, cy+r);
+    ctx.lineTo(cx+r*0.55, cy-r*0.15);
+    ctx.lineTo(cx+r*0.05, cy-r*0.15);
+    ctx.closePath();
+    ctx.fill();
+  }
+  function freeDrawSmiley(ctx,cx,cy,r){
+    ctx.beginPath();
+    ctx.arc(cx,cy,r*0.9,0,Math.PI*2);
+    ctx.fill();
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath(); ctx.arc(cx-r*0.32, cy-r*0.22, r*0.12, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx+r*0.32, cy-r*0.22, r*0.12, 0, Math.PI*2); ctx.fill();
+    ctx.lineWidth = r*0.18;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(cx, cy+r*0.05, r*0.5, 0.15*Math.PI, 0.85*Math.PI);
+    ctx.stroke();
+    ctx.restore();
+  }
+  function freeDrawDrop(ctx,cx,cy,r){
+    ctx.beginPath();
+    ctx.moveTo(cx, cy-r);
+    ctx.bezierCurveTo(cx+r*0.9, cy-r*0.1, cx+r*0.65, cy+r*0.9, cx, cy+r*0.9);
+    ctx.bezierCurveTo(cx-r*0.65, cy+r*0.9, cx-r*0.9, cy-r*0.1, cx, cy-r);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function freeRenderStage(){
+    const zoom = freeZoom();
+    const stage = $("freeStage");
+    stage.style.width = (IMG_W*zoom)+"px";
+    stage.style.height = (IMG_H*zoom)+"px";
+    stage.innerHTML = "";
+
+    // Lớp ảnh nền - LUÔN dưới cùng, phủ kín toàn khung, không kéo/chọn
+    // được (chỉ đổi qua nút "Đổi ảnh nền"/"Xoá ảnh nền" + mục Tinh chỉnh
+    // ảnh ở trên) - dùng lại ĐÚNG drawFitted() của mục 04 (scale context
+    // theo zoom trước khi vẽ) để xem trước khớp 100% với ảnh gửi thật.
+    if(freeBgImg){
+      const bgCanvas = document.createElement("canvas");
+      bgCanvas.width = IMG_W*zoom; bgCanvas.height = IMG_H*zoom;
+      bgCanvas.style.position = "absolute";
+      bgCanvas.style.left = "0"; bgCanvas.style.top = "0";
+      bgCanvas.style.pointerEvents = "none";
+      const bctx = bgCanvas.getContext("2d");
+      bctx.scale(zoom, zoom);
+      const fitmode = document.querySelector('input[name=freefitmode]:checked').value;
+      drawFitted(freeBgImg, bctx, fitmode);
+      stage.appendChild(bgCanvas);
+    }
+
+    freeElements.forEach((el, idx) => {
+      const div = document.createElement("div");
+      div.className = "layout-el free-el";
+      if(idx===freeSelected) div.classList.add("selected");
+      const bounds = freeElBounds(el);
+      div.style.left = (el.x*zoom)+"px";
+      div.style.top  = (el.y*zoom)+"px";
+      div.style.width = (bounds.w*zoom)+"px";
+      div.style.height = (bounds.h*zoom)+"px";
+
+      if(el.type==="text"){
+        div.textContent = el.text;
+        div.style.fontSize = (el.fontSize*zoom)+"px";
+        div.style.lineHeight = (bounds.h*zoom)+"px";
+        div.style.fontWeight = el.bold ? "700" : "400";
+        div.style.fontFamily = '"Segoe UI", Arial, sans-serif';
+        div.style.color = layoutColorCss(el.color);
+        div.style.whiteSpace = "nowrap";
+        div.style.justifyContent = "flex-start";
+      }else if(el.type==="image" && el.img){
+        const img = document.createElement("img");
+        img.src = el.img.src;
+        img.draggable = false;
+        div.appendChild(img);
+      }else if(el.type==="icon"){
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(bounds.w*zoom));
+        c.height = Math.max(1, Math.round(bounds.h*zoom));
+        const ictx = c.getContext("2d");
+        drawFreeIcon(ictx, el.iconKind, 0, 0, c.width, c.height, layoutColorCss(el.color));
+        div.appendChild(c);
+      }
+
+      div.addEventListener("pointerdown", (e) => freeStartDrag(e, idx));
+      stage.appendChild(div);
+    });
+
+    $("freeCountLabel").textContent = `${freeElements.length} phần tử`;
+    updateFreeSendBtn();
+    freeRenderProps();
+  }
+
+  function freeStartDrag(e, idx){
+    e.preventDefault();
+    e.stopPropagation();
+    const zoom = freeZoom();
+    freeDrag = {
+      idx, startX: e.clientX, startY: e.clientY,
+      elStartX: freeElements[idx].x, elStartY: freeElements[idx].y,
+      zoom,
+    };
+    e.target.setPointerCapture(e.pointerId);
+    e.target.classList.add("dragging");
+    window.addEventListener("pointermove", freeOnDrag);
+    window.addEventListener("pointerup", freeEndDrag);
+  }
+
+  function freeOnDrag(e){
+    if(!freeDrag) return;
+    const dxPx = e.clientX - freeDrag.startX;
+    const dyPx = e.clientY - freeDrag.startY;
+    const el = freeElements[freeDrag.idx];
+    const bounds = freeElBounds(el);
+    const dxDev = Math.round(dxPx/freeDrag.zoom);
+    const dyDev = Math.round(dyPx/freeDrag.zoom);
+    const maxX = Math.max(0, IMG_W-bounds.w);
+    const maxY = Math.max(0, IMG_H-bounds.h);
+    el.x = layoutClamp(freeDrag.elStartX+dxDev, 0, maxX);
+    el.y = layoutClamp(freeDrag.elStartY+dyDev, 0, maxY);
+    freeRenderStage();
+  }
+
+  function freeEndDrag(e){
+    if(!freeDrag) return;
+    const idx = freeDrag.idx;
+    window.removeEventListener("pointermove", freeOnDrag);
+    window.removeEventListener("pointerup", freeEndDrag);
+    freeDrag = null;
+    freeSelected = idx;
+    freeRenderStage();
+  }
+
+  $("freeStage").addEventListener("pointerdown", (e) => {
+    if(e.target.id==="freeStage"){ freeSelected = -1; freeRenderStage(); }
+  });
+
+  function freeLayerButtonsHtml(){
+    return `
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:10px; color:var(--ink-faint);">Lớp:</span>
+        <button type="button" class="secondary small btnFreeLayerBack">Xuống dưới cùng</button>
+        <button type="button" class="secondary small btnFreeLayerDown">Xuống 1 lớp</button>
+        <button type="button" class="secondary small btnFreeLayerUp">Lên 1 lớp</button>
+        <button type="button" class="secondary small btnFreeLayerFront">Lên trên cùng</button>
+      </div>
+    `;
+  }
+
+  function freeRenderProps(){
+    const panel = $("freePropsPanel");
+    if(freeSelected<0 || !freeElements[freeSelected]){
+      panel.style.display = "none";
+      panel.innerHTML = "";
+      return;
+    }
+    const el = freeElements[freeSelected];
+    panel.style.display = "flex";
+
+    if(el.type==="text"){
+      panel.innerHTML = `
+        <label class="lf">Nội dung
+          <input type="text" id="freePropText" value="${el.text.replace(/"/g,"&quot;")}" style="font-family:var(--font-mono); font-size:12px; border:1px solid var(--rule); border-radius:6px; padding:6px 7px; width:170px;">
+        </label>
+        <label class="lf">Cỡ chữ <input type="number" id="freePropSize" min="8" max="120" value="${el.fontSize}"></label>
+        <label class="lf">Màu <select id="freePropColor">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select></label>
+        <label class="lf" style="flex-direction:row; align-items:center; gap:4px;">
+          <input type="checkbox" id="freePropBold" ${el.bold?"checked":""}> Đậm
+        </label>
+        ${freeLayerButtonsHtml()}
+        <button class="btnDel small">Xoá phần tử</button>
+      `;
+      $("freePropText").addEventListener("input", (e) => { el.text = e.target.value; freeClampFree(el); freeRenderStage(); });
+      $("freePropSize").addEventListener("input", (e) => { el.fontSize = layoutClamp(parseInt(e.target.value,10)||16, 8, 120); freeClampFree(el); freeRenderStage(); });
+      $("freePropColor").addEventListener("change", (e) => { el.color = parseInt(e.target.value,10); freeRenderStage(); });
+      $("freePropBold").addEventListener("change", (e) => { el.bold = e.target.checked; freeRenderStage(); });
+    }else if(el.type==="image"){
+      panel.innerHTML = `
+        <label class="lf">Rộng <input type="number" id="freePropW" min="4" max="${IMG_W}" value="${el.w}"></label>
+        <label class="lf">Cao <input type="number" id="freePropH" min="4" max="${IMG_H}" value="${el.h}"></label>
+        ${freeLayerButtonsHtml()}
+        <button class="btnDel small">Xoá phần tử</button>
+      `;
+      $("freePropW").addEventListener("input", (e) => { el.w = layoutClamp(parseInt(e.target.value,10)||el.w, 4, IMG_W); freeClampFree(el); freeRenderStage(); });
+      $("freePropH").addEventListener("input", (e) => { el.h = layoutClamp(parseInt(e.target.value,10)||el.h, 4, IMG_H); freeClampFree(el); freeRenderStage(); });
+    }else if(el.type==="icon"){
+      panel.innerHTML = `
+        <label class="lf">Biểu tượng <select id="freePropIcon">${FREE_ICON_LIST.map(o=>`<option value="${o.value}"${o.value===el.iconKind?" selected":""}>${o.label}</option>`).join("")}</select></label>
+        <label class="lf">Kích thước <input type="number" id="freePropSize2" min="8" max="${Math.min(IMG_W,IMG_H)}" value="${el.w}"></label>
+        <label class="lf">Màu <select id="freePropColor2">${layoutOptionsHtml(LAYOUT_COLORS, el.color)}</select></label>
+        ${freeLayerButtonsHtml()}
+        <button class="btnDel small">Xoá phần tử</button>
+      `;
+      $("freePropIcon").addEventListener("change", (e) => { el.iconKind = e.target.value; freeRenderStage(); });
+      $("freePropSize2").addEventListener("input", (e) => {
+        const s = layoutClamp(parseInt(e.target.value,10)||el.w, 8, Math.min(IMG_W,IMG_H));
+        el.w = s; el.h = s; freeClampFree(el); freeRenderStage();
+      });
+      $("freePropColor2").addEventListener("change", (e) => { el.color = parseInt(e.target.value,10); freeRenderStage(); });
+    }
+
+    panel.querySelector(".btnDel").addEventListener("click", () => {
+      freeElements.splice(freeSelected, 1);
+      freeSelected = -1;
+      freeRenderStage();
+    });
+    const back = panel.querySelector(".btnFreeLayerBack"), down = panel.querySelector(".btnFreeLayerDown"),
+          up = panel.querySelector(".btnFreeLayerUp"), front = panel.querySelector(".btnFreeLayerFront");
+    if(front) front.addEventListener("click", () => {
+      const [moved] = freeElements.splice(freeSelected,1);
+      freeElements.push(moved); freeSelected = freeElements.length-1; freeRenderStage();
+    });
+    if(back) back.addEventListener("click", () => {
+      const [moved] = freeElements.splice(freeSelected,1);
+      freeElements.unshift(moved); freeSelected = 0; freeRenderStage();
+    });
+    if(up) up.addEventListener("click", () => {
+      if(freeSelected < freeElements.length-1){
+        const t=freeElements[freeSelected]; freeElements[freeSelected]=freeElements[freeSelected+1]; freeElements[freeSelected+1]=t;
+        freeSelected += 1; freeRenderStage();
+      }
+    });
+    if(down) down.addEventListener("click", () => {
+      if(freeSelected > 0){
+        const t=freeElements[freeSelected]; freeElements[freeSelected]=freeElements[freeSelected-1]; freeElements[freeSelected-1]=t;
+        freeSelected -= 1; freeRenderStage();
+      }
+    });
+  }
+
+  $("btnFreeAddText").addEventListener("click", () => {
+    if(freeElements.length >= FREE_MAX_ELEMENTS){ log(`Đã đạt tối đa ${FREE_MAX_ELEMENTS} phần tử tự do.`, "err"); return; }
+    freeElements.push({ type:"text", x:10, y:10, text:"Chữ mới", fontSize:24, color:0, bold:false });
+    freeSelected = freeElements.length-1;
+    freeRenderStage();
+  });
+
+  $("btnFreeAddImage").addEventListener("click", () => $("freeImageInput").click());
+  $("freeImageInput").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if(!file) return;
+    if(freeElements.length >= FREE_MAX_ELEMENTS){ log(`Đã đạt tối đa ${FREE_MAX_ELEMENTS} phần tử tự do.`, "err"); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+        const maxW = Math.round(IMG_W*0.5), maxH = Math.round(IMG_H*0.5);
+        const scale = Math.min(1, maxW/iw, maxH/ih);
+        const w = Math.max(4, Math.round(iw*scale)), h = Math.max(4, Math.round(ih*scale));
+        freeElements.push({ type:"image", x:10, y:10, w, h, img });
+        freeSelected = freeElements.length-1;
+        freeRenderStage();
+        log("Đã thêm ảnh/logo vào thiết kế tự do.", "ok");
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  $("btnFreeAddIcon").addEventListener("click", () => {
+    const box = $("freeIconPicker");
+    box.style.display = box.style.display==="flex" ? "none" : "flex";
+  });
+  (function initFreeIconPicker(){
+    const box = $("freeIconPicker");
+    box.innerHTML = FREE_ICON_LIST.map(o => `<button type="button" class="secondary small" data-icon="${o.value}">${o.label}</button>`).join("");
+    box.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if(freeElements.length >= FREE_MAX_ELEMENTS){ log(`Đã đạt tối đa ${FREE_MAX_ELEMENTS} phần tử tự do.`, "err"); box.style.display = "none"; return; }
+        const size = Math.max(8, Math.round(Math.min(IMG_W, IMG_H)*0.25));
+        freeElements.push({ type:"icon", x:10, y:10, w:size, h:size, iconKind: btn.dataset.icon, color:0 });
+        freeSelected = freeElements.length-1;
+        box.style.display = "none";
+        freeRenderStage();
+      });
+    });
+  })();
+
+  $("btnFreeAddBg").addEventListener("click", () => $("freeBgInput").click());
+  $("freeBgInput").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        freeBgImg = img;
+        $("btnFreeAddBg").textContent = "Đổi ảnh nền";
+        $("btnFreeRemoveBg").style.display = "";
+        freeRenderStage();
+        log("Đã đặt ảnh nền cho thiết kế tự do.", "ok");
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  $("btnFreeRemoveBg").addEventListener("click", () => {
+    freeBgImg = null;
+    $("btnFreeAddBg").textContent = "+ Ảnh nền";
+    $("btnFreeRemoveBg").style.display = "none";
+    freeRenderStage();
+  });
+
+  $("btnFreeTuning").addEventListener("click", () => {
+    const panel = $("freeTuningPanel");
+    panel.style.display = panel.style.display==="block" ? "none" : "block";
+  });
+  document.querySelectorAll('input[name=freefitmode]').forEach((el) => {
+    el.addEventListener("change", freeRenderStage);
+  });
+
+  $("btnFreeClear").addEventListener("click", () => {
+    freeElements = [];
+    freeSelected = -1;
+    freeBgImg = null;
+    $("btnFreeAddBg").textContent = "+ Ảnh nền";
+    $("btnFreeRemoveBg").style.display = "none";
+    freeRenderStage();
+    log("Đã xoá toàn bộ thiết kế ảnh tự do.");
+  });
+
+  function updateFreeSendBtn(){
+    $("btnFreeSend").disabled = !(device && device.gatt && device.gatt.connected);
+  }
+
+  // Ghép mọi phần tử (ảnh nền + chữ/ảnh/biểu tượng theo đúng thứ tự lớp)
+  // thành 1 canvas kích thước ĐÚNG IMG_W×IMG_H (không zoom) - trả về context
+  // để hàm gửi tiếp tục chạy qua ĐÚNG pipeline xử lý ảnh của mục 04.
+  function freeComposite(){
+    const canvas = document.createElement("canvas");
+    canvas.width = IMG_W; canvas.height = IMG_H;
+    const ctx = canvas.getContext("2d");
+    if(freeBgImg){
+      const fitmode = document.querySelector('input[name=freefitmode]:checked').value;
+      drawFitted(freeBgImg, ctx, fitmode);
+    }else{
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0,0,IMG_W,IMG_H);
+    }
+    freeElements.forEach(el => {
+      if(el.type==="text"){
+        ctx.fillStyle = layoutColorCss(el.color);
+        ctx.font = `${el.bold?"700":"400"} ${el.fontSize}px "Segoe UI", Arial, sans-serif`;
+        ctx.textBaseline = "top";
+        ctx.fillText(el.text, el.x, el.y);
+      }else if(el.type==="image" && el.img){
+        ctx.drawImage(el.img, el.x, el.y, el.w, el.h);
+      }else if(el.type==="icon"){
+        drawFreeIcon(ctx, el.iconKind, el.x, el.y, el.w, el.h, layoutColorCss(el.color));
+      }
+    });
+    return ctx;
+  }
+
+  async function sendFreeCanvas(){
+    if(!longValChar){ log("Chưa kết nối thiết bị.", "err"); return; }
+    if(freeElements.length===0 && !freeBgImg){ log("Chưa có gì để gửi - hãy thêm chữ/ảnh/biểu tượng/ảnh nền trước.", "err"); return; }
+
+    $("btnFreeSend").disabled = true;
+    $("freeSendProgress").style.display = "block";
+    $("freeSendProgress").value = 0;
+
+    try{
+      const ctx = freeComposite();
+      // Chạy qua ĐÚNG pipeline enhancement của mục 04 (autoContrast trên ảnh
+      // đã ghép có tác dụng gần như không đáng kể ở đây vì canvas đã có nền
+      // trắng + nét đen/đỏ đặc, tương phản sẵn cao - giữ lại để 2 mục dùng
+      // chung 100% 1 đường xử lý, không có nhánh riêng dễ lệch kết quả).
+      autoContrast(ctx);
+      const agingLevel = parseInt($("freeAgingLevel").value, 10);
+      const gamma = 1.0 + (agingLevel/100)*1.5;
+      applyGamma(ctx, gamma);
+      const blackPointVal = parseInt($("freeBlackPoint").value, 10);
+      applyBlackPoint(ctx, blackPointVal);
+      sharpen(ctx, 0.5);
+
+      const brightnessAdj = parseInt($("freeThreshRange").value, 10);
+      const redReduce = currentDevice.hasRed ? parseInt($("freeRedReduce").value, 10) : 100;
+      const noDither = $("freeGraphicMode").checked;
+      const chromaWeight = 6 * (1 - redReduce/120);
+      const { packed } = ditherAndPack(ctx, brightnessAdj, chromaWeight, noDither);
+      freePackedImage = packed;
+
+      const startBuf = new Uint8Array(9);
+      startBuf[0] = 0x96;
+      startBuf[1] = IMG_W & 0xff; startBuf[2] = (IMG_W>>8) & 0xff;
+      startBuf[3] = IMG_H & 0xff; startBuf[4] = (IMG_H>>8) & 0xff;
+      startBuf[5] = IMG_DATA_LEN & 0xff;
+      startBuf[6] = (IMG_DATA_LEN>>8) & 0xff;
+      startBuf[7] = (IMG_DATA_LEN>>16) & 0xff;
+      startBuf[8] = (IMG_DATA_LEN>>24) & 0xff;
+      await writeWithRetry(startBuf, 3);
+      log(`Đã gửi lệnh bắt đầu (0x96) cho màn ${currentDevice.label} - đang gửi ảnh thiết kế tự do…`);
+
+      const chunkSize = currentDevice.chunkSize;
+      const totalChunks = Math.ceil(IMG_DATA_LEN/chunkSize);
+      for(let i=0; i<totalChunks; i++){
+        const off = i*chunkSize;
+        const end = Math.min(off+chunkSize, IMG_DATA_LEN);
+        const chunkData = freePackedImage.slice(off, end);
+        const buf = new Uint8Array(3+chunkData.length);
+        buf[0] = 0x97;
+        buf[1] = i & 0xff;
+        buf[2] = (i>>8) & 0xff;
+        buf.set(chunkData, 3);
+        await writeWithRetry(buf, 3);
+        await sleep(15);
+        $("freeSendProgress").value = Math.round((i+1)/totalChunks*100);
+        if(i % 20 === 0){ log(`Đã gửi gói ${i+1}/${totalChunks}…`); }
+      }
+
+      log(`Đã gửi xong thiết kế tự do (${totalChunks} gói). Thiết bị đang hiển thị…`, "ok");
+    }catch(err){
+      log("Lỗi khi gửi thiết kế tự do: " + err.message, "err");
+    }finally{
+      updateFreeSendBtn();
+    }
+  }
+  $("btnFreeSend").addEventListener("click", sendFreeCanvas);
+
+  freeRenderStage();
 
   // ---------------------------------------------------------------
   // Gắn sự kiện
